@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from core.event_rules import load_rules, find_match
+
 MONTH_NAMES = [
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
@@ -59,6 +61,10 @@ class PathBuilder:
         if "Videos" not in self._cat_folders:
             self._cat_folders["Videos"] = s.get("video_root_name", "Videos")
 
+        # event rules ("Memory Mapper") — checked before normal segments
+        self._event_rules = load_rules(config)
+        self._events_root = s.get("events_root_name", "Events")
+
     # ── public ────────────────────────────────────────────────────────────────
 
     def build(
@@ -69,6 +75,16 @@ class PathBuilder:
         date: Optional[datetime],
         filename: str,
     ) -> Path:
+        # Memory Mapper: if any user-defined event rule matches, route the
+        # file into {dest_root}/{events_root}/{event.folder_name}/{filename}
+        # — overriding the normal segment-based path.
+        if self._event_rules:
+            match = find_match(self._event_rules, date,
+                               device=device_name, category=media_type)
+            if match is not None:
+                return dest_root / self._events_root / match.folder_name / filename
+
+        # Default segment-based path
         path = dest_root
         for token in self._segments:
             part = self._render(token, media_type, device_name, date)

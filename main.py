@@ -690,6 +690,463 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Memory Mapper (event-based folders) ──────────────────────────────────────
+
+class MemoryMapperDialog(ctk.CTkToplevel):
+    """List view of all event rules — add / edit / toggle / delete."""
+
+    def __init__(self, parent, config: dict, on_save):
+        super().__init__(parent)
+        self.title("Memory Mapper")
+        self.geometry("680x620")
+        self.resizable(True, True)
+        self.minsize(560, 480)
+        _apply_icon(self)
+        self._config  = config
+        self._on_save = on_save
+        # Work on a copy so Cancel really cancels
+        from core.event_rules import load_rules
+        self._rules   = load_rules(config)
+        self._build()
+        _center_on_parent(self, parent)
+        self.grab_set()
+
+    # ── build ─────────────────────────────────────────────────────────────────
+
+    def _build(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # ── header ──
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="✨  Memory Mapper",
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color=("#FFFFFF", "#F0D090")
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        ctk.CTkLabel(hdr,
+                     text="Files captured during these date ranges go to a "
+                          "named event folder instead of the default structure.",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#F0D090", "#9A8060"),
+                     wraplength=620, justify="left",
+                     ).pack(padx=20, pady=(0, 14), anchor="w")
+
+        # ── scrollable list of rule cards ──
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        scroll.grid_columnconfigure(0, weight=1)
+        self._scroll = scroll
+        self._render_cards()
+
+        # ── fixed bottom bar ──
+        bottom = ctk.CTkFrame(self, corner_radius=0,
+                              fg_color=("#D8CDB8", "#231C14"))
+        bottom.grid(row=2, column=0, sticky="ew")
+        bottom.grid_columnconfigure(0, weight=1)
+
+        bar = ctk.CTkFrame(bottom, fg_color="transparent")
+        bar.grid(row=0, column=0, padx=20, pady=14, sticky="ew")
+        bar.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkButton(bar, text="✨  Create Event", width=160,
+                      command=self._add_event
+                      ).grid(row=0, column=0, sticky="w")
+
+        end_bar = ctk.CTkFrame(bar, fg_color="transparent")
+        end_bar.grid(row=0, column=2, sticky="e")
+        ctk.CTkButton(end_bar, text="Cancel", width=100,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(end_bar, text="💾  Save", width=120,
+                      command=self._save
+                      ).pack(side="left")
+
+    def _render_cards(self):
+        for w in self._scroll.winfo_children():
+            w.destroy()
+
+        if not self._rules:
+            empty = ctk.CTkFrame(self._scroll, fg_color=("#DDD0BE", "#2D2318"),
+                                 corner_radius=8)
+            empty.pack(fill="x", padx=18, pady=18)
+            ctk.CTkLabel(empty,
+                         text="🪺  No events yet.\n\n"
+                              "Click  ✨ Create Event  to define a date range "
+                              "with a custom folder name —\nperfect for trips, "
+                              "birthdays, or any cluster of memories.",
+                         font=ctk.CTkFont(size=12),
+                         text_color=("gray45", "gray55"),
+                         justify="left",
+                         ).pack(padx=20, pady=24, anchor="w")
+            return
+
+        # newest priority first, then by start date
+        ordered = sorted(self._rules, key=lambda r: (-r.priority, r.start))
+        for idx, rule in enumerate(ordered):
+            self._render_card(rule, idx)
+
+    def _render_card(self, rule, idx_in_view):
+        # find the *original* index in self._rules so edit/delete affect right one
+        orig_idx = self._rules.index(rule)
+
+        c = ctk.CTkFrame(self._scroll, fg_color=("#DDD0BE", "#2D2318"),
+                         corner_radius=8,
+                         border_width=1,
+                         border_color=("#C8A878", "#4A3820"))
+        c.pack(fill="x", padx=18, pady=(8, 0))
+        c.grid_columnconfigure(0, weight=1)
+
+        # title row (name + priority badge + enabled badge)
+        title_row = ctk.CTkFrame(c, fg_color="transparent")
+        title_row.grid(row=0, column=0, padx=14, pady=(12, 4), sticky="ew")
+        title_row.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(title_row,
+                     text=("" if rule.enabled else "💤  ")
+                          + rule.name,
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=("#5A3A10", "#F0D090") if rule.enabled
+                                else ("gray55", "gray55"),
+                     ).grid(row=0, column=0, sticky="w")
+
+        ctk.CTkLabel(title_row,
+                     text=f"⭐ {rule.priority}",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#7A4A10", "#C8A060")
+                     ).grid(row=0, column=1, sticky="e", padx=(8, 0))
+
+        # date range
+        date_str = (
+            f"{rule.start.strftime('%d %b %Y')}"
+            + (f"  {rule.start.strftime('%H:%M')}" if _has_time(rule.start) else "")
+            + f"  →  "
+            + f"{rule.end.strftime('%d %b %Y')}"
+            + (f"  {rule.end.strftime('%H:%M')}" if _has_time(rule.end) else "")
+        )
+        ctk.CTkLabel(c, text=f"📅  {date_str}",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#3D2C14", "#E0D0B0"),
+                     ).grid(row=1, column=0, padx=14, sticky="w")
+
+        # folder
+        ctk.CTkLabel(c, text=f"📁  Events / {rule.folder_name}",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#3D2C14", "#E0D0B0"),
+                     ).grid(row=2, column=0, padx=14, pady=(2, 0), sticky="w")
+
+        # filters (compact)
+        filt_parts = []
+        if rule.devices:
+            filt_parts.append(f"📷 {', '.join(rule.devices)}")
+        if rule.categories:
+            filt_parts.append(f"🏷 {', '.join(rule.categories)}")
+        if filt_parts:
+            ctk.CTkLabel(c, text="    ".join(filt_parts),
+                         font=ctk.CTkFont(size=10),
+                         text_color=("gray45", "gray60"),
+                         ).grid(row=3, column=0, padx=14, pady=(2, 0), sticky="w")
+
+        # action buttons row
+        btn_row = ctk.CTkFrame(c, fg_color="transparent")
+        btn_row.grid(row=4, column=0, padx=14, pady=(8, 12), sticky="e")
+        ctk.CTkButton(btn_row, text="Edit", width=70, height=26,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=lambda i=orig_idx: self._edit_event(i),
+                      ).pack(side="left", padx=(0, 6))
+        toggle_text = "Disable" if rule.enabled else "Enable"
+        ctk.CTkButton(btn_row, text=toggle_text, width=80, height=26,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=lambda i=orig_idx: self._toggle_event(i),
+                      ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_row, text="Delete", width=70, height=26,
+                      fg_color="#B83828", hover_color="#8C2A1E",
+                      text_color="#FFFFFF",
+                      command=lambda i=orig_idx: self._delete_event(i),
+                      ).pack(side="left")
+
+    # ── actions ───────────────────────────────────────────────────────────────
+
+    def _add_event(self):
+        from core.event_rules import EventRule
+        from datetime import datetime, timedelta
+        # sensible defaults: today 00:00 → tomorrow 23:59
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        new = EventRule(
+            name="New Event",
+            start=today,
+            end=today + timedelta(days=1, hours=23, minutes=59),
+            folder_name="New Event",
+            priority=10,
+        )
+        self._open_editor(new, is_new=True)
+
+    def _edit_event(self, idx: int):
+        self._open_editor(self._rules[idx], is_new=False, idx=idx)
+
+    def _open_editor(self, rule, is_new: bool, idx: int = -1):
+        def on_save(updated):
+            if is_new:
+                self._rules.append(updated)
+            else:
+                self._rules[idx] = updated
+            self._render_cards()
+        EventEditorDialog(self, rule, on_save=on_save,
+                          known_devices=self._known_devices(),
+                          known_categories=self._known_categories())
+
+    def _toggle_event(self, idx: int):
+        self._rules[idx].enabled = not self._rules[idx].enabled
+        self._render_cards()
+
+    def _delete_event(self, idx: int):
+        rule = self._rules[idx]
+        ok = messagebox.askyesno("Delete event",
+                                 f"Delete event '{rule.name}'?",
+                                 parent=self)
+        if not ok:
+            return
+        self._rules.pop(idx)
+        self._render_cards()
+
+    def _save(self):
+        self._config["event_rules"] = [r.to_dict() for r in self._rules]
+        save_config(self._config)
+        self._on_save(self._config)
+        self.destroy()
+
+    def _known_devices(self) -> list[str]:
+        return sorted(set(self._config.get("device_mappings", {}).values()))
+
+    def _known_categories(self) -> list[str]:
+        return [c.get("name", "") for c in self._config.get("categories", [])
+                if c.get("name")]
+
+
+# ── Event editor dialog (used by Memory Mapper) ──────────────────────────────
+
+class EventEditorDialog(ctk.CTkToplevel):
+    """Edit a single EventRule — name, dates, folder, filters, priority."""
+
+    def __init__(self, parent, rule, on_save,
+                 known_devices: list[str], known_categories: list[str]):
+        super().__init__(parent)
+        self.title("Edit Event")
+        self.geometry("560x640")
+        self.resizable(False, False)
+        _apply_icon(self)
+        self._rule = rule
+        self._on_save = on_save
+        self._known_devices = known_devices
+        self._known_categories = known_categories
+        self._build()
+        _center_on_parent(self, parent)
+        self.grab_set()
+
+    def _build(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # header
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="✨  Event Details",
+                     font=ctk.CTkFont(size=15, weight="bold"),
+                     text_color=("#FFFFFF", "#F0D090"),
+                     ).pack(padx=20, pady=12, anchor="w")
+
+        # body (scrollable)
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew")
+        body.grid_columnconfigure(0, weight=1)
+
+        # ── name ──
+        ctk.CTkLabel(body, text="Display name",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        self._name_var = tk.StringVar(value=self._rule.name)
+        ctk.CTkEntry(body, textvariable=self._name_var,
+                     placeholder_text="e.g. HBD Party OOM 2025"
+                     ).pack(padx=20, pady=(0, 4), fill="x")
+
+        # ── date range ──
+        ctk.CTkLabel(body, text="Date range  (YYYY-MM-DD HH:MM)",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        date_row = ctk.CTkFrame(body, fg_color="transparent")
+        date_row.pack(padx=20, pady=(0, 4), fill="x")
+        date_row.grid_columnconfigure((0, 2), weight=1)
+
+        ctk.CTkLabel(date_row, text="Start", width=40
+                     ).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(date_row, text="End", width=40
+                     ).grid(row=0, column=2, sticky="w", padx=(8, 0))
+        self._start_var = tk.StringVar(value=self._rule.start.strftime("%Y-%m-%d %H:%M"))
+        self._end_var   = tk.StringVar(value=self._rule.end.strftime("%Y-%m-%d %H:%M"))
+        ctk.CTkEntry(date_row, textvariable=self._start_var,
+                     ).grid(row=1, column=0, sticky="ew")
+        ctk.CTkLabel(date_row, text="→", font=ctk.CTkFont(size=14)
+                     ).grid(row=1, column=1, padx=8)
+        ctk.CTkEntry(date_row, textvariable=self._end_var,
+                     ).grid(row=1, column=2, sticky="ew", padx=(8, 0))
+
+        ctk.CTkLabel(body,
+                     text="Tip: Omit time (just YYYY-MM-DD) to span the whole day.",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray55"),
+                     ).pack(padx=20, pady=(2, 0), anchor="w")
+
+        # ── folder name ──
+        ctk.CTkLabel(body, text="Folder name",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        self._folder_var = tk.StringVar(value=self._rule.folder_name)
+        ctk.CTkEntry(body, textvariable=self._folder_var,
+                     placeholder_text="e.g. HBD PARTY OOM 2025"
+                     ).pack(padx=20, pady=(0, 2), fill="x")
+        self._preview_lbl = ctk.CTkLabel(body, text="",
+                                         font=ctk.CTkFont(size=10),
+                                         text_color=("gray45", "gray55"),
+                                         )
+        self._preview_lbl.pack(padx=20, pady=(0, 4), anchor="w")
+        self._folder_var.trace_add("write", lambda *_: self._update_preview())
+        self._update_preview()
+
+        # ── filters: devices ──
+        ctk.CTkLabel(body, text="Limit to devices  (optional)",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        self._dev_vars = {}
+        if self._known_devices:
+            for dev in self._known_devices:
+                v = tk.BooleanVar(value=dev in self._rule.devices)
+                self._dev_vars[dev] = v
+                ctk.CTkCheckBox(body, text=dev, variable=v,
+                                font=ctk.CTkFont(size=11),
+                                ).pack(padx=24, pady=2, anchor="w")
+            ctk.CTkLabel(body,
+                         text="(none ticked = applies to any device)",
+                         font=ctk.CTkFont(size=10),
+                         text_color=("gray45", "gray55"),
+                         ).pack(padx=24, pady=(2, 4), anchor="w")
+        else:
+            ctk.CTkLabel(body,
+                         text="No devices defined yet — open Device Manager to add some.",
+                         font=ctk.CTkFont(size=10),
+                         text_color=("gray45", "gray55"),
+                         ).pack(padx=20, pady=(2, 4), anchor="w")
+
+        # ── filters: categories ──
+        ctk.CTkLabel(body, text="Limit to categories  (optional)",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        cat_row = ctk.CTkFrame(body, fg_color="transparent")
+        cat_row.pack(padx=20, pady=(0, 4), anchor="w")
+        self._cat_vars = {}
+        for i, cat in enumerate(self._known_categories or ["Photos", "Videos"]):
+            v = tk.BooleanVar(value=cat in self._rule.categories)
+            self._cat_vars[cat] = v
+            ctk.CTkCheckBox(cat_row, text=cat, variable=v,
+                            font=ctk.CTkFont(size=11),
+                            ).grid(row=0, column=i, padx=(0, 14))
+
+        # ── priority + enabled ──
+        prio_row = ctk.CTkFrame(body, fg_color="transparent")
+        prio_row.pack(padx=20, pady=(14, 4), fill="x")
+
+        ctk.CTkLabel(prio_row, text="Priority",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     ).pack(side="left")
+        self._priority_var = tk.IntVar(value=self._rule.priority)
+        ctk.CTkEntry(prio_row, textvariable=self._priority_var,
+                     width=80,
+                     ).pack(side="left", padx=(8, 12))
+        ctk.CTkLabel(prio_row,
+                     text="higher wins on overlap",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray55"),
+                     ).pack(side="left")
+
+        self._enabled_var = tk.BooleanVar(value=self._rule.enabled)
+        ctk.CTkCheckBox(body, text="Enabled",
+                        variable=self._enabled_var,
+                        font=ctk.CTkFont(size=12, weight="bold"),
+                        ).pack(padx=20, pady=(8, 18), anchor="w")
+
+        # ── bottom buttons ──
+        bottom = ctk.CTkFrame(self, corner_radius=0,
+                              fg_color=("#D8CDB8", "#231C14"))
+        bottom.grid(row=2, column=0, sticky="ew")
+
+        btn_bar = ctk.CTkFrame(bottom, fg_color="transparent")
+        btn_bar.pack(padx=20, pady=14, anchor="e")
+        ctk.CTkButton(btn_bar, text="Cancel", width=100,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy,
+                      ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_bar, text="💾  Save", width=120,
+                      command=self._save,
+                      ).pack(side="left")
+
+    def _update_preview(self):
+        folder = self._folder_var.get().strip() or "(name)"
+        self._preview_lbl.configure(
+            text=f"Files will save to:  Events / {folder} /")
+
+    def _save(self):
+        from core.event_rules import EventRule, try_parse_datetime
+        name = self._name_var.get().strip()
+        folder = self._folder_var.get().strip()
+        if not name or not folder:
+            messagebox.showwarning("Missing fields",
+                                   "Display name and folder name are required.",
+                                   parent=self)
+            return
+
+        start = try_parse_datetime(self._start_var.get().strip())
+        raw_end = self._end_var.get().strip()
+        end = try_parse_datetime(raw_end)
+        if start is None or end is None:
+            messagebox.showwarning("Invalid date",
+                                   "Use format YYYY-MM-DD or YYYY-MM-DD HH:MM.",
+                                   parent=self)
+            return
+        # If end has no time component, push it to 23:59:59 so the whole day is covered
+        if not _has_time(end) and len(raw_end) <= 10:
+            end = end.replace(hour=23, minute=59, second=59)
+        if end < start:
+            messagebox.showwarning("Invalid range",
+                                   "End must be after start.", parent=self)
+            return
+
+        try:
+            priority = int(self._priority_var.get())
+        except (tk.TclError, ValueError):
+            priority = 0
+
+        updated = EventRule(
+            name        = name,
+            start       = start,
+            end         = end,
+            folder_name = folder,
+            devices     = [d for d, v in self._dev_vars.items() if v.get()],
+            categories  = [c for c, v in self._cat_vars.items() if v.get()],
+            priority    = priority,
+            enabled     = self._enabled_var.get(),
+        )
+        self._on_save(updated)
+        self.destroy()
+
+
+def _has_time(dt) -> bool:
+    return bool(dt.hour or dt.minute or dt.second)
+
+
 # ── Duplicate History dialog ──────────────────────────────────────────────────
 
 class ResetDedupDialog(ctk.CTkToplevel):
@@ -1845,10 +2302,16 @@ class App(ctk.CTk):
                       command=self._open_category_manager
                       ).grid(row=1, column=0, columnspan=2, pady=(0, 4), sticky="ew")
 
+        ctk.CTkButton(tools, text="✨  Memory Mapper",
+                      fg_color=("#C8882A", "#C8882A"), hover_color=("#B07020", "#B07020"),
+                      text_color="#FFFFFF",
+                      command=self._open_memory_mapper
+                      ).grid(row=2, column=0, columnspan=2, pady=(0, 4), sticky="ew")
+
         ctk.CTkButton(tools, text="🗑  Duplicate History",
                       fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._open_reset_dedup
-                      ).grid(row=2, column=0, columnspan=2, pady=(0, 0), sticky="ew")
+                      ).grid(row=3, column=0, columnspan=2, pady=(0, 0), sticky="ew")
 
         # Start / Stop
         btn_frame = ctk.CTkFrame(left, fg_color="transparent")
@@ -2050,6 +2513,9 @@ class App(ctk.CTk):
     def _open_category_manager(self):
         CategoryManagerDialog(self, self._config, on_save=self._reload_config)
 
+    def _open_memory_mapper(self):
+        MemoryMapperDialog(self, self._config, on_save=self._reload_config)
+
     def _open_reset_dedup(self):
         ResetDedupDialog(self, self._dest_var.get())
 
@@ -2068,6 +2534,7 @@ class App(ctk.CTk):
         self.bind("<F1>",             lambda _e: self._open_device_manager())
         self.bind("<F2>",             lambda _e: self._open_folder_structure())
         self.bind("<F3>",             lambda _e: self._open_category_manager())
+        self.bind("<F4>",             lambda _e: self._open_memory_mapper())
         self.bind("<Control-comma>",  lambda _e: self._open_settings())
 
     def _safe_start(self):
