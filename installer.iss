@@ -5,11 +5,11 @@
 [Setup]
 AppName=MemoryNest Sync
 AppVersion=1.0.0
-AppPublisher=Your Name
+AppPublisher=ZigGaZa Studio
 DefaultDirName={autopf}\MemoryNest Sync
 DefaultGroupName=MemoryNest Sync
 OutputDir=installer_output
-OutputBaseFilename=MediaOrganizer_Setup
+OutputBaseFilename=MemoryNestSync_Setup_v1.0.0
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

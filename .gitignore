@@ -1,0 +1,42 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+
+# ── Virtual envs ──────────────────────────────────────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+
+# ── PyInstaller build artifacts ───────────────────────────────────────────────
+build/
+dist/
+*.spec.bak
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Runtime / user data ───────────────────────────────────────────────────────
+settings.json
+.organizer/
+
+# ── IDE / Editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Claude session state ──────────────────────────────────────────────────────
+.claude/settings.local.json
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+desktop.ini
+installer_output/

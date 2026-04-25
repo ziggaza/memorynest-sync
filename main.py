@@ -27,6 +27,15 @@ LOG_DIR      = BASE_DIR / "logs"
 
 log_setup(LOG_DIR)
 
+# ── Windows taskbar icon fix ───────────────────────────────────────────────────
+try:
+    import ctypes as _ctypes
+    _ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+        "ZigGaZa.MemoryNestSync.1"
+    )
+except Exception:
+    pass
+
 # ── settings helpers ───────────────────────────────────────────────────────────
 _DEFAULT_SETTINGS = {
     "theme": "dark",
@@ -57,12 +66,28 @@ def _tc() -> dict:
     """Return theme-aware colors for native tk widgets (Listbox, Text)."""
     dark = ctk.get_appearance_mode().lower() == "dark"
     return {
-        "lb_bg":  "#2b2b2b" if dark else "#f0f0f0",
-        "lb_fg":  "#dce4ee" if dark else "#1a1a1a",
-        "lb_sel": "#1f6aa5",
-        "log_bg": "#1a1a1a" if dark else "#f5f5f5",
-        "log_fg": "#dce4ee" if dark else "#1a1a1a",
+        "lb_bg":  "#2D2318" if dark else "#EDE5D5",
+        "lb_fg":  "#F0E0C0" if dark else "#2D1C08",
+        "lb_sel": "#C8882A",
+        "log_bg": "#1E1710" if dark else "#EDE5D5",
+        "log_fg": "#E8D5B0" if dark else "#2D1C08",
     }
+
+
+def _apply_icon(window: ctk.CTkToplevel) -> None:
+    """Set the app icon on a CTkToplevel.
+    CTkToplevel calls _windows_set_titlebar_icon() via after(200, ...) which
+    resets the icon — we must fire AFTER that, so 300 ms is the safe minimum.
+    """
+    ico = str(BASE_DIR / "assets" / "icon.ico")
+    if not (BASE_DIR / "assets" / "icon.ico").exists():
+        return
+    def _set():
+        try:
+            window.iconbitmap(ico)
+        except Exception:
+            pass
+    window.after(300, _set)
 
 
 # ── Device Manager dialog ──────────────────────────────────────────────────────
@@ -73,6 +98,7 @@ class DeviceManagerDialog(ctk.CTkToplevel):
         self.title("Device Manager")
         self.geometry("820x560")
         self.resizable(True, True)
+        _apply_icon(self)
         self._config  = config
         self._on_save = on_save
         # rows: (key_entry, val_entry, is_auto_label)
@@ -103,7 +129,7 @@ class DeviceManagerDialog(ctk.CTkToplevel):
         if auto_keys:
             ctk.CTkLabel(self,
                          text=f"  {len(auto_keys)} auto-detected device(s) need a folder name  (shown in amber)",
-                         text_color="#f39c12",
+                         text_color="#C8882A",
                          font=ctk.CTkFont(size=11)
                          ).grid(row=0, column=0, padx=16, pady=(0, 2), sticky="e")
 
@@ -125,13 +151,13 @@ class DeviceManagerDialog(ctk.CTkToplevel):
         ctk.CTkButton(bar, text="Save", width=110,
                       command=self._save).pack(side="right")
         ctk.CTkButton(bar, text="Cancel", width=110,
-                      fg_color="gray40", hover_color="gray30",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self.destroy).pack(side="right", padx=(0, 8))
 
     def _add_row(self, key="", val="", row=None, is_auto=False):
         if row is None:
             row = len(self._rows)
-        fg = "#f39c12" if is_auto else ctk.ThemeManager.theme["CTkEntry"]["border_color"][1]
+        fg = "#C8882A" if is_auto else ctk.ThemeManager.theme["CTkEntry"]["border_color"][1]
 
         k_entry = ctk.CTkEntry(self._scroll, placeholder_text="Make|Model",
                                border_color=fg if is_auto else None)
@@ -145,7 +171,7 @@ class DeviceManagerDialog(ctk.CTkToplevel):
 
         src_lbl = ctk.CTkLabel(self._scroll,
                                text="auto" if is_auto else "defined",
-                               text_color="#f39c12" if is_auto else "gray60",
+                               text_color="#C8882A" if is_auto else ("gray50", "#9A8060"),
                                font=ctk.CTkFont(size=10), width=60, anchor="w")
         src_lbl.grid(row=row, column=2, pady=3, sticky="w")
 
@@ -200,6 +226,7 @@ class FolderStructureDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Folder Structure Manager")
         self.geometry("620x610")
+        _apply_icon(self)
         self.resizable(False, False)
         self._config   = config
         self._on_save  = on_save
@@ -246,7 +273,7 @@ class FolderStructureDialog(ctk.CTkToplevel):
         self._preview_var = tk.StringVar()
         ctk.CTkLabel(prev_outer, textvariable=self._preview_var,
                      font=ctk.CTkFont(family="Consolas", size=11),
-                     text_color="#3498db", anchor="w"
+                     text_color="#E0A030", anchor="w"
                      ).grid(row=1, column=0, padx=10, pady=(0,8), sticky="ew")
         self._update_preview()
 
@@ -257,7 +284,7 @@ class FolderStructureDialog(ctk.CTkToplevel):
                      font=ctk.CTkFont(size=11)).pack(side="left", padx=(0,8))
         for name in PRESETS:
             ctk.CTkButton(preset_frame, text=name, width=90, height=26,
-                          fg_color="gray35", hover_color="gray25",
+                          fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                           command=lambda n=name: self._apply_preset(n)
                           ).pack(side="left", padx=(0,4))
 
@@ -267,7 +294,7 @@ class FolderStructureDialog(ctk.CTkToplevel):
         ctk.CTkButton(btn_bar, text="Save", width=110,
                       command=self._save).pack(side="right")
         ctk.CTkButton(btn_bar, text="Cancel", width=110,
-                      fg_color="gray40", hover_color="gray30",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self.destroy).pack(side="right", padx=(0,8))
 
     # ── row rendering ──────────────────────────────────────────────────────────
@@ -278,17 +305,17 @@ class FolderStructureDialog(ctk.CTkToplevel):
 
         for i, key in enumerate(self._order):
             meta = SEGMENT_META[key]
-            row_f = ctk.CTkFrame(self._list_frame, fg_color=("gray85", "#2b2b2b"), corner_radius=6)
+            row_f = ctk.CTkFrame(self._list_frame, fg_color=("#DDD0BE", "#2D2318"), corner_radius=6)
             row_f.grid(row=i, column=0, pady=3, sticky="ew")
             row_f.grid_columnconfigure(2, weight=1)
 
             # up / down
             ctk.CTkButton(row_f, text="↑", width=28, height=28,
-                          fg_color="gray35", hover_color="gray25",
+                          fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                           command=lambda k=key: self._move(k, -1)
                           ).grid(row=0, column=0, padx=(6,2), pady=6)
             ctk.CTkButton(row_f, text="↓", width=28, height=28,
-                          fg_color="gray35", hover_color="gray25",
+                          fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                           command=lambda k=key: self._move(k, +1)
                           ).grid(row=0, column=1, padx=(0,8), pady=6)
 
@@ -373,6 +400,7 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Category Manager")
         self.geometry("780x540")
+        _apply_icon(self)
         self.resizable(True, True)
         self._config  = config
         self._on_save = on_save
@@ -410,7 +438,7 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         self._cat_list.bind("<<ListboxSelect>>", self._on_list_select)
 
         ctk.CTkButton(left, text="+ New Category", height=30,
-                      fg_color="gray35", hover_color="gray25",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._add_category
                       ).grid(row=2, column=0, padx=8, pady=(0,10), sticky="ew")
 
@@ -483,14 +511,14 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         ctk.CTkButton(ext_ctrl, text="Add", width=64, height=28,
                       command=self._add_extensions).grid(row=0, column=1, padx=(0,6))
         ctk.CTkButton(ext_ctrl, text="Remove", width=78, height=28,
-                      fg_color="gray40", hover_color="gray30",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._remove_extensions).grid(row=0, column=2)
 
         # Delete category
         del_row = ctk.CTkFrame(right, fg_color="transparent")
         del_row.grid(row=6, column=0, columnspan=2, padx=12, pady=(2,12), sticky="ew")
         self._del_btn = ctk.CTkButton(del_row, text="Delete Category",
-                                       fg_color="#c0392b", hover_color="#922b21",
+                                       fg_color="#B83828", hover_color="#8C2A1E",
                                        height=28, width=150,
                                        command=self._delete_category)
         self._del_btn.pack(side="left")
@@ -503,7 +531,7 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         btn_bar = ctk.CTkFrame(self, fg_color="transparent")
         btn_bar.grid(row=1, column=0, columnspan=2, padx=12, pady=(0,12), sticky="e")
         ctk.CTkButton(btn_bar, text="Cancel", width=100,
-                      fg_color="gray40", hover_color="gray30",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self.destroy).pack(side="left", padx=(0,8))
         ctk.CTkButton(btn_bar, text="Save", width=100,
                       command=self._save).pack(side="left")
@@ -618,6 +646,399 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Duplicate History dialog ──────────────────────────────────────────────────
+
+class ResetDedupDialog(ctk.CTkToplevel):
+    """Shows both app databases (hashes.db + progress.db) with reset options."""
+
+    def __init__(self, parent, dest_path: str):
+        super().__init__(parent)
+        self.title("App Memory — Reset")
+        self.geometry("620x700")
+        self.resizable(True, True)
+        self.minsize(560, 500)
+        _apply_icon(self)
+
+        self._dest_path   = dest_path.strip()
+        self._hash_db:    Path | None = None
+        self._ckpt_db:    Path | None = None
+        self._hash_count  = 0
+        self._ckpt_count  = 0
+        self._also_ckpt   = tk.BooleanVar(value=True)
+        self._resolve_dbs()
+        self._build()
+        self.grab_set()
+
+    # ── resolve ───────────────────────────────────────────────────────────────
+
+    def _resolve_dbs(self):
+        if not self._dest_path:
+            return
+        import sqlite3
+        org = Path(self._dest_path) / ".organizer"
+
+        h = org / "hashes.db"
+        if h.exists():
+            self._hash_db = h
+            try:
+                con = sqlite3.connect(str(h))
+                r = con.execute("SELECT COUNT(*) FROM hashes").fetchone()
+                self._hash_count = r[0] if r else 0
+                con.close()
+            except Exception:
+                pass
+
+        p = org / "progress.db"
+        if p.exists():
+            self._ckpt_db = p
+            try:
+                con = sqlite3.connect(str(p))
+                r = con.execute(
+                    "SELECT COUNT(*) FROM progress "
+                    "WHERE status IN ('moved','duplicate','copied')"
+                ).fetchone()
+                self._ckpt_count = r[0] if r else 0
+                con.close()
+            except Exception:
+                pass
+
+    # ── build UI ──────────────────────────────────────────────────────────────
+    #
+    # Layout (3-zone):
+    #   row 0  — amber header        [FIXED top]
+    #   row 1  — scrollable content  [EXPANDS, scrollable]
+    #   row 2  — checkbox + buttons  [FIXED bottom — always visible]
+    #
+
+    def _build(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)   # only scroll area expands
+
+        # ══ ZONE 1: fixed amber header ════════════════════════════════════════
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="🧠  App Memory — Reset",
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color=("#FFFFFF", "#F0D090")
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        ctk.CTkLabel(hdr,
+                     text="The app uses two databases to track past runs. "
+                          "You can clear them here.",
+                     font=ctk.CTkFont(size=12),
+                     text_color=("#F0D090", "#9A8060")
+                     ).pack(padx=20, pady=(0, 14), anchor="w")
+
+        # ══ ZONE 2: scrollable content ════════════════════════════════════════
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        scroll.grid_columnconfigure(0, weight=1)
+
+        if not self._dest_path:
+            ctk.CTkLabel(scroll,
+                         text="⚠️  No Destination folder selected.\n"
+                              "    Please choose a Destination folder first.",
+                         font=ctk.CTkFont(size=12),
+                         text_color=("gray45", "gray55"), justify="left"
+                         ).pack(padx=20, pady=20, anchor="w")
+        else:
+            self._build_db_card(
+                scroll,
+                icon       = "📦",
+                title      = "Duplicate History",
+                subtitle   = "hashes.db  —  remembers file content to detect duplicates",
+                db_path    = self._hash_db,
+                count      = self._hash_count,
+                count_unit = "unique files fingerprinted",
+                note       = "Resetting this clears all duplicate detection.",
+            )
+            self._build_db_card(
+                scroll,
+                icon       = "📋",
+                title      = "Resume Checkpoint",
+                subtitle   = "progress.db  —  remembers which files were already processed",
+                db_path    = self._ckpt_db,
+                count      = self._ckpt_count,
+                count_unit = "files marked as done  (skipped on next Resume run)",
+                note       = "⚠  This is why files are still skipped after resetting "
+                             "Duplicate History alone.",
+                note_color = ("#9A3010", "#E07050"),
+            )
+
+            # When SHOULD you reset?
+            yes_card = ctk.CTkFrame(scroll, fg_color=("#DFF0DF", "#1C2A1C"), corner_radius=8)
+            yes_card.pack(fill="x", padx=16, pady=(10, 0))
+            ctk.CTkLabel(yes_card, text="✅  When SHOULD you reset?",
+                         font=ctk.CTkFont(size=13, weight="bold"),
+                         text_color=("#2A6A2A", "#7AB648")
+                         ).pack(padx=14, pady=(12, 4), anchor="w")
+            for line in (
+                "• Starting a completely fresh organization from scratch",
+                "• Switching to a new Destination folder",
+                "• All files in the Destination have been deleted",
+            ):
+                ctk.CTkLabel(yes_card, text=line, font=ctk.CTkFont(size=12),
+                             text_color=("#3A7A3A", "#9ACC80")
+                             ).pack(padx=24, pady=2, anchor="w")
+            ctk.CTkFrame(yes_card, height=10, fg_color="transparent").pack()
+
+            # When should you NOT reset?
+            no_card = ctk.CTkFrame(scroll, fg_color=("#F5EAD5", "#2E200E"), corner_radius=8)
+            no_card.pack(fill="x", padx=16, pady=(10, 16))
+            ctk.CTkLabel(no_card, text="⚠️  When should you NOT reset?",
+                         font=ctk.CTkFont(size=13, weight="bold"),
+                         text_color=("#8A5010", "#E0A030")
+                         ).pack(padx=14, pady=(12, 4), anchor="w")
+            for line in (
+                "• Still using the same Destination folder",
+                "• Adding new files to an existing collection",
+                "  → Already-organized files may be re-imported as duplicates",
+            ):
+                ctk.CTkLabel(no_card, text=line, font=ctk.CTkFont(size=12),
+                             text_color=("#7A4010", "#C8A060")
+                             ).pack(padx=24, pady=2, anchor="w")
+            ctk.CTkFrame(no_card, height=10, fg_color="transparent").pack()
+
+        # ══ ZONE 3: fixed bottom — checkbox + buttons (always visible) ════════
+        bottom = ctk.CTkFrame(self, corner_radius=0,
+                              fg_color=("#D8CDB8", "#231C14"))
+        bottom.grid(row=2, column=0, sticky="ew")
+        bottom.grid_columnconfigure(0, weight=1)
+
+        can_reset = bool(self._dest_path and (
+            (self._hash_db and self._hash_db.exists() and self._hash_count > 0)
+            or (self._ckpt_db and self._ckpt_db.exists() and self._ckpt_count > 0)
+        ))
+
+        if self._dest_path:
+            ctk.CTkCheckBox(bottom,
+                            text="Also clear Resume Checkpoint  "
+                                 "(re-process all files on next run)",
+                            variable=self._also_ckpt,
+                            font=ctk.CTkFont(size=12)
+                            ).grid(row=0, column=0, padx=20, pady=(14, 8), sticky="w")
+
+        btn_bar = ctk.CTkFrame(bottom, fg_color="transparent")
+        btn_bar.grid(row=1, column=0, padx=20, pady=(0, 16), sticky="e")
+
+        ctk.CTkButton(btn_bar, text="Close", width=100,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).pack(side="left", padx=(0, 10))
+
+        self._reset_btn = ctk.CTkButton(
+            btn_bar, text="🗑  Reset Memory", width=160,
+            fg_color="#B83828" if can_reset else ("#8A7060", "#4A3830"),
+            hover_color="#8C2A1E" if can_reset else ("#8A7060", "#4A3830"),
+            text_color="#FFFFFF",
+            text_color_disabled="#C8B8A8",
+            state="normal" if can_reset else "disabled",
+            command=self._do_reset)
+        self._reset_btn.pack(side="left")
+
+    def _build_db_card(self, parent, icon, title, subtitle,
+                       db_path, count, count_unit, note, note_color=None):
+        """Render one database info card into *parent* (scrollable frame)."""
+        card = ctk.CTkFrame(parent, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+        card.pack(fill="x", padx=16, pady=(10, 0))
+        card.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(card, text=f"{icon}  {title}",
+                     font=ctk.CTkFont(size=13, weight="bold")
+                     ).grid(row=0, column=0, columnspan=2, padx=14, pady=(12, 0), sticky="w")
+        ctk.CTkLabel(card, text=subtitle,
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray50", "gray55")
+                     ).grid(row=1, column=0, columnspan=2, padx=14, pady=(2, 8), sticky="w")
+        ctk.CTkFrame(card, height=1, fg_color=("gray70", "#4A3820")
+                     ).grid(row=2, column=0, columnspan=2, sticky="ew", padx=14)
+
+        if db_path and count > 0:
+            ctk.CTkLabel(card, text="Entries",
+                         font=ctk.CTkFont(size=12)
+                         ).grid(row=3, column=0, padx=14, pady=(10, 2), sticky="w")
+            ctk.CTkLabel(card, text=f"{count:,}",
+                         font=ctk.CTkFont(size=20, weight="bold"),
+                         text_color=("#B07020", "#E0A030")
+                         ).grid(row=3, column=1, padx=8, pady=(10, 2), sticky="w")
+            ctk.CTkLabel(card, text=count_unit,
+                         font=ctk.CTkFont(size=11),
+                         text_color=("gray50", "gray55")
+                         ).grid(row=4, column=1, padx=8, pady=(0, 4), sticky="w")
+        else:
+            status = "✅  Empty — nothing to reset" if db_path else "✅  Not found — nothing to reset"
+            ctk.CTkLabel(card, text=status,
+                         font=ctk.CTkFont(size=12),
+                         text_color=("#3A7A3A", "#7AB648")
+                         ).grid(row=3, column=0, columnspan=2, padx=14, pady=(10, 4), sticky="w")
+
+        ctk.CTkLabel(card, text=note,
+                     font=ctk.CTkFont(size=11),
+                     text_color=note_color or ("gray45", "gray55"),
+                     wraplength=520, justify="left"
+                     ).grid(row=5, column=0, columnspan=2, padx=14, pady=(4, 12), sticky="w")
+
+    # ── action ────────────────────────────────────────────────────────────────
+
+    def _do_reset(self):
+        also_ckpt = self._also_ckpt.get()
+
+        targets: list[tuple[Path, str, int]] = []
+        if self._hash_db and self._hash_db.exists() and self._hash_count > 0:
+            targets.append((self._hash_db, "Duplicate History (hashes.db)",
+                            self._hash_count))
+        if also_ckpt and self._ckpt_db and self._ckpt_db.exists() and self._ckpt_count > 0:
+            targets.append((self._ckpt_db, "Resume Checkpoint (progress.db)",
+                            self._ckpt_count))
+
+        if not targets:
+            messagebox.showinfo("Nothing to Reset",
+                                "No database files found.", parent=self)
+            return
+
+        # custom confirm dialog (clearer than messagebox)
+        if not _ConfirmResetDialog(self, targets, self._dest_path).result:
+            return
+
+        deleted, errors = [], []
+        # delete the main DB plus any SQLite auxiliary files (-wal, -shm,
+        # -journal). WAL/SHM hold uncommitted data; if left behind they can
+        # resurrect rows the next time SQLite reopens the DB at the same path.
+        for db, label, _count in targets:
+            try:
+                for suffix in ("", "-wal", "-shm", "-journal"):
+                    aux = db.parent / (db.name + suffix)
+                    if aux.exists():
+                        aux.unlink()
+                deleted.append(label)
+            except Exception as exc:
+                errors.append(f"{label}: {exc}")
+
+        if errors:
+            messagebox.showerror("Error", "\n".join(errors), parent=self)
+        if deleted:
+            messagebox.showinfo(
+                "Reset Complete",
+                "Deleted:\n   • " + "\n   • ".join(deleted)
+                + "\n\nThe next Run will start fresh duplicate detection.",
+                parent=self)
+            self.destroy()
+
+
+# ── Confirm Reset dialog (custom, very explicit about scope) ──────────────────
+
+class _ConfirmResetDialog(ctk.CTkToplevel):
+    """Modal confirmation showing exactly what is / isn't deleted.
+
+    Use:  if _ConfirmResetDialog(parent, targets, dest).result:  ...
+    """
+
+    def __init__(self, parent, targets, dest_path):
+        super().__init__(parent)
+        self.title("Confirm Reset")
+        self.geometry("560x540")
+        self.resizable(False, False)
+        _apply_icon(self)
+        self.transient(parent)
+        self.result = False
+        self._build(targets, dest_path)
+        self.grab_set()
+        self.wait_window()
+
+    def _build(self, targets, dest_path):
+        self.grid_columnconfigure(0, weight=1)
+
+        # ── red header ──
+        hdr = ctk.CTkFrame(self, corner_radius=0,
+                           fg_color=("#B83828", "#7A1818"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="⚠️  Confirm Reset",
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color="#FFFFFF"
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        ctk.CTkLabel(hdr, text="Please review carefully — this cannot be undone.",
+                     font=ctk.CTkFont(size=11),
+                     text_color="#FFD0C0"
+                     ).pack(padx=20, pady=(0, 14), anchor="w")
+
+        # ── content body ──
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=18, pady=(14, 0))
+        body.grid_columnconfigure(0, weight=1)
+
+        # 🗑 Will be DELETED card
+        del_card = ctk.CTkFrame(body, fg_color=("#F8DDD8", "#3A1818"),
+                                corner_radius=8,
+                                border_color=("#D45030", "#9A3010"),
+                                border_width=1)
+        del_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        ctk.CTkLabel(del_card, text="🗑  WILL BE DELETED",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color=("#9A3010", "#E07050")
+                     ).pack(padx=14, pady=(10, 4), anchor="w")
+        for db, label, count in targets:
+            ctk.CTkLabel(del_card,
+                         text=f"• {label}  —  {count:,} entries",
+                         font=ctk.CTkFont(size=12),
+                         text_color=("#7A2010", "#E0A090")
+                         ).pack(padx=24, pady=1, anchor="w")
+        ctk.CTkLabel(del_card,
+                     text="(database files inside the .organizer/ folder)",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("#7A2010", "#C09090")
+                     ).pack(padx=24, pady=(2, 10), anchor="w")
+
+        # 🛡 SAFE card
+        safe_card = ctk.CTkFrame(body, fg_color=("#DFF0DF", "#1C2A1C"),
+                                 corner_radius=8,
+                                 border_color=("#7AB648", "#2A6A2A"),
+                                 border_width=1)
+        safe_card.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        ctk.CTkLabel(safe_card, text="🛡  WILL NOT BE TOUCHED",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color=("#2A6A2A", "#7AB648")
+                     ).pack(padx=14, pady=(10, 4), anchor="w")
+        for line in (
+            "• All photo/video files in your Destination folder",
+            "• All sub-folders (Photos/, Videos/, Duplicates/, etc.)",
+            "• All files in your Source folders",
+            "• App settings and configuration",
+        ):
+            ctk.CTkLabel(safe_card, text=line,
+                         font=ctk.CTkFont(size=12),
+                         text_color=("#3A7A3A", "#9ACC80")
+                         ).pack(padx=24, pady=1, anchor="w")
+        ctk.CTkLabel(safe_card,
+                     text="✓ Your actual photos and videos are completely safe.",
+                     font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=("#2A6A2A", "#7AB648")
+                     ).pack(padx=14, pady=(6, 10), anchor="w")
+
+        # ── buttons ──
+        btn_bar = ctk.CTkFrame(self, fg_color="transparent")
+        btn_bar.grid(row=2, column=0, padx=20, pady=(8, 18), sticky="e")
+
+        ctk.CTkButton(btn_bar, text="Cancel", width=110,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self._cancel
+                      ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(btn_bar, text="🗑  Yes, Reset Memory", width=180,
+                      fg_color="#B83828", hover_color="#8C2A1E",
+                      text_color="#FFFFFF",
+                      command=self._confirm
+                      ).pack(side="left")
+
+    def _cancel(self):
+        self.result = False
+        self.destroy()
+
+    def _confirm(self):
+        self.result = True
+        self.destroy()
+
+
 # ── splash screen ─────────────────────────────────────────────────────────────
 
 class SplashScreen(tk.Toplevel):
@@ -722,8 +1143,8 @@ class App(ctk.CTk):
         self.withdraw()   # hide until splash is done
 
         self.title("MemoryNest Sync")
-        self.geometry("1200x800")
-        self.minsize(940, 640)
+        self.geometry("1200x820")
+        self.minsize(1000, 680)
 
         # window icon
         ico = BASE_DIR / "assets" / "icon.ico"
@@ -749,7 +1170,7 @@ class App(ctk.CTk):
 
         # apply saved theme
         ctk.set_appearance_mode(self._settings.get("theme", "dark"))
-        ctk.set_default_color_theme("blue")
+        ctk.set_default_color_theme(str(BASE_DIR / "assets" / "nest_theme.json"))
 
         self._build_layout()
         self._poll_events()
@@ -798,9 +1219,13 @@ class App(ctk.CTk):
         self.grid_columnconfigure(0, weight=0, minsize=330)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=0)  # top bar
-        self.grid_rowconfigure(1, weight=1)  # main content
+        self.grid_rowconfigure(1, weight=0)  # amber separator
+        self.grid_rowconfigure(2, weight=1)  # main content
 
         self._build_topbar()
+        ctk.CTkFrame(self, height=2, corner_radius=0,
+                     fg_color=("#B07020", "#C8882A")
+                     ).grid(row=1, column=0, columnspan=2, sticky="ew", padx=0, pady=0)
         self._build_left_panel()
         self._build_right_panel()
 
@@ -811,19 +1236,21 @@ class App(ctk.CTk):
         bar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=0, pady=0)
         bar.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(bar, text="MemoryNest Sync",
-                     font=ctk.CTkFont(size=14, weight="bold")
+        ctk.CTkLabel(bar, text="🪺  MemoryNest Sync",
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=("#7A4A10", "#C8882A"),
                      ).grid(row=0, column=0, padx=16, pady=8, sticky="w")
 
         # version — right side, beside theme button
         ctk.CTkLabel(bar, text=f"v{APP_VERSION}",
-                     font=ctk.CTkFont(size=10), text_color="gray55"
+                     font=ctk.CTkFont(size=10),
+                     text_color=("#9A7850", "#9A8060"),
                      ).grid(row=0, column=1, padx=(0, 6), pady=8, sticky="e")
 
         # theme cycle button
         self._theme_btn = ctk.CTkButton(
             bar, text=self._theme_icon(), width=110, height=28,
-            fg_color="gray35", hover_color="gray25",
+            fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
             font=ctk.CTkFont(size=13),
             command=self._cycle_theme)
         self._theme_btn.grid(row=0, column=2, padx=(0, 12), pady=6)
@@ -852,7 +1279,7 @@ class App(ctk.CTk):
 
     def _build_left_panel(self):
         left = ctk.CTkFrame(self, width=330)
-        left.grid(row=1, column=0, padx=(12, 6), pady=(0, 12), sticky="nsew")
+        left.grid(row=2, column=0, padx=(12, 6), pady=(0, 12), sticky="nsew")
         left.grid_propagate(False)
         left.grid_columnconfigure(0, weight=1)
 
@@ -869,7 +1296,7 @@ class App(ctk.CTk):
             src_frame, height=4, bg=_tc()["lb_bg"], fg=_tc()["lb_fg"],
             selectbackground=_tc()["lb_sel"], relief="flat",
             font=("Consolas", 9), borderwidth=0, highlightthickness=1,
-            highlightbackground="#555", activestyle="none",
+            highlightbackground="#6A5538", activestyle="none",
         )
         self._src_listbox.grid(row=0, column=0, sticky="ew")
 
@@ -878,7 +1305,7 @@ class App(ctk.CTk):
         ctk.CTkButton(src_btn, text="+ Add Folder", height=28,
                       command=self._add_source).pack(side="left", padx=(0, 4))
         ctk.CTkButton(src_btn, text="Remove", height=28, width=80,
-                      fg_color="gray40", hover_color="gray30",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._remove_source).pack(side="left")
 
         # Destination
@@ -954,20 +1381,25 @@ class App(ctk.CTk):
         tools.grid_columnconfigure((0, 1), weight=1)
 
         self._dev_mgr_btn = ctk.CTkButton(
-            tools, text="Device Manager",
-            fg_color="gray35", hover_color="gray25",
+            tools, text="🗺  Device Manager",
+            fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
             command=self._open_device_manager)
         self._dev_mgr_btn.grid(row=0, column=0, padx=(0, 4), pady=(0,4), sticky="ew")
 
-        ctk.CTkButton(tools, text="Folder Structure",
-                      fg_color="gray35", hover_color="gray25",
+        ctk.CTkButton(tools, text="🗂  Folder Structure",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._open_folder_structure
                       ).grid(row=0, column=1, padx=(4, 0), pady=(0,4), sticky="ew")
 
-        ctk.CTkButton(tools, text="Category Manager",
-                      fg_color="gray35", hover_color="gray25",
+        ctk.CTkButton(tools, text="🏷  Category Manager",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._open_category_manager
-                      ).grid(row=1, column=0, columnspan=2, pady=(0,0), sticky="ew")
+                      ).grid(row=1, column=0, columnspan=2, pady=(0, 4), sticky="ew")
+
+        ctk.CTkButton(tools, text="🗑  Duplicate History",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
+                      command=self._open_reset_dedup
+                      ).grid(row=2, column=0, columnspan=2, pady=(0, 0), sticky="ew")
 
         # Start / Stop
         btn_frame = ctk.CTkFrame(left, fg_color="transparent")
@@ -982,7 +1414,8 @@ class App(ctk.CTk):
 
         self._btn_stop = ctk.CTkButton(
             btn_frame, text="⏹  Stop", height=38,
-            fg_color="#c0392b", hover_color="#922b21",
+            fg_color="#B83828", hover_color="#8C2A1E",
+            text_color="#FFFFFF", text_color_disabled="#C0A0A0",
             state="disabled", command=self._stop)
         self._btn_stop.grid(row=0, column=1, padx=(4, 0), sticky="ew")
 
@@ -1011,31 +1444,73 @@ class App(ctk.CTk):
                      text="POWERED BY  ZigGaZa STUDIO",
                      font=ctk.CTkFont(size=9),
                      text_color="gray45"
-                     ).grid(row=1, column=0, pady=(0, 10))
+                     ).grid(row=1, column=0, pady=(0, 2))
+
+        # ── clickable website link ──────────────────────────────────────────
+        _WEBSITE = "https://ziggaza.github.io/memorynest-sync/"
+        web_lbl = tk.Label(logo_frame,
+                           text="🌐  memorynest-sync",
+                           font=("Segoe UI", 8, "underline"),
+                           fg="#C8882A", bg="#231C14",
+                           cursor="hand2", borderwidth=0)
+        web_lbl.grid(row=2, column=0, pady=(0, 10))
+        web_lbl.bind("<Button-1>",
+                     lambda _e: __import__("webbrowser").open(_WEBSITE))
+        # keep bg in sync with theme (light mode uses lighter bg)
+        def _sync_web_bg(lbl=web_lbl):
+            dark = ctk.get_appearance_mode().lower() == "dark"
+            lbl.configure(bg="#231C14" if dark else "#EAE0D0",
+                          fg="#C8882A" if dark else "#8A5A10")
+        _sync_web_bg()
+        # re-sync when theme changes — piggyback on existing cycle_theme
+        _orig_cycle = self._cycle_theme
+        def _patched_cycle(orig=_orig_cycle, sync=_sync_web_bg):
+            orig()
+            self.after(50, sync)
+        self._cycle_theme = _patched_cycle
+        self._theme_btn.configure(command=_patched_cycle)
 
     # ─ right panel ────────────────────────────────────────────────────────────
 
     def _build_right_panel(self):
         right = ctk.CTkFrame(self)
-        right.grid(row=1, column=1, padx=(6, 12), pady=(0, 12), sticky="nsew")
+        right.grid(row=2, column=1, padx=(6, 12), pady=(0, 12), sticky="nsew")
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
-        # Stats
+        # Stats — 2 rows × 3 cols grid so they always fit at any window width
         stats_frame = ctk.CTkFrame(right, fg_color="transparent")
-        stats_frame.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="ew")
+        stats_frame.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
+        stats_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
+        _STAT_DEFS = [
+            # (icon, label, key, accent_color, grid_row, grid_col)
+            ("🪺", "Total",   "total",   "#C8882A", 0, 0),
+            ("📷", "Photos",  "photos",  "#C8882A", 0, 1),
+            ("🎬", "Videos",  "videos",  "#C8882A", 0, 2),
+            ("🗂", "Dupes",   "dupes",   "#D4A030", 1, 0),
+            ("⏩", "Resumed", "resumed", "#7AB648", 1, 1),
+            ("⚠️", "Errors",  "errors",  "#D45030", 1, 2),
+        ]
         self._stat_vars = {}
-        for lbl, key in [("Total","total"),("Photos","photos"),("Videos","videos"),
-                         ("Dupes","dupes"),("Resumed","resumed"),("Errors","errors")]:
-            f = ctk.CTkFrame(stats_frame, fg_color=("gray85", "#2b2b2b"), corner_radius=8)
-            f.pack(side="left", padx=(0, 8), ipadx=10, ipady=4)
+        for icon, lbl, key, accent, gr, gc in _STAT_DEFS:
+            pad_x = (0, 6) if gc < 2 else (0, 0)
+            pad_y = (0, 6) if gr == 0 else (0, 0)
+            f = ctk.CTkFrame(stats_frame, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+            f.grid(row=gr, column=gc, padx=pad_x, pady=pad_y, sticky="ew")
+            # top accent bar
+            ctk.CTkFrame(f, height=3, corner_radius=2, fg_color=accent
+                         ).pack(fill="x", padx=6, pady=(4, 0))
+            ctk.CTkLabel(f, text=icon, font=ctk.CTkFont(size=15)
+                         ).pack(pady=(3, 0))
             var = tk.StringVar(value="—")
             self._stat_vars[key] = var
             ctk.CTkLabel(f, textvariable=var,
-                         font=ctk.CTkFont(size=18, weight="bold")).pack()
+                         font=ctk.CTkFont(size=24, weight="bold"),
+                         text_color=("#5A3A10", "#F0D090")).pack()
             ctk.CTkLabel(f, text=lbl,
-                         font=ctk.CTkFont(size=10), text_color="gray60").pack()
+                         font=ctk.CTkFont(size=11),
+                         text_color=("#8A7055", "#9A8060")).pack(pady=(0, 5))
 
         # Log panel
         log_outer = ctk.CTkFrame(right)
@@ -1048,7 +1523,7 @@ class App(ctk.CTk):
         ctk.CTkLabel(log_hdr, text="Activity Log",
                      font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
         ctk.CTkButton(log_hdr, text="Clear", width=60, height=24,
-                      fg_color="gray35", hover_color="gray25",
+                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
                       command=self._clear_log).pack(side="right")
 
         self._log_text = tk.Text(
@@ -1059,8 +1534,8 @@ class App(ctk.CTk):
         sb.grid(row=1, column=1, sticky="ns")
         self._log_text.configure(yscrollcommand=sb.set)
 
-        for tag, color in [("ok","#2ecc71"),("dupe","#f39c12"),
-                           ("error","#e74c3c"),("info","#7f8c8d"),("head","#3498db")]:
+        for tag, color in [("ok","#7AB648"),("dupe","#C8882A"),
+                           ("error","#D45030"),("info","#9A8870"),("head","#E0A030")]:
             self._log_text.tag_configure(tag, foreground=color)
 
         # Progress bars
@@ -1082,7 +1557,7 @@ class App(ctk.CTk):
 
         ctk.CTkLabel(prog, text="Current", width=60, anchor="e",
                      font=ctk.CTkFont(size=11)).grid(row=1, column=0, padx=(0,8), pady=(4,0))
-        self._prog_current = ctk.CTkProgressBar(prog, height=8, progress_color="#2ecc71")
+        self._prog_current = ctk.CTkProgressBar(prog, height=8)
         self._prog_current.grid(row=1, column=1, sticky="ew", pady=(4,0))
         self._prog_current.set(0)
         self._current_label = ctk.CTkLabel(prog, text="—", width=80, anchor="w",
@@ -1126,6 +1601,9 @@ class App(ctk.CTk):
     def _open_category_manager(self):
         CategoryManagerDialog(self, self._config, on_save=self._reload_config)
 
+    def _open_reset_dedup(self):
+        ResetDedupDialog(self, self._dest_var.get())
+
     def _reload_config(self, new_cfg: dict):
         self._config = new_cfg
         self._update_badge()
@@ -1154,11 +1632,11 @@ class App(ctk.CTk):
     def _update_badge(self):
         count = len(self._config.get("auto_detected_keys", []))
         if count:
-            self._dev_mgr_btn.configure(text=f"Device Manager  ({count})",
-                                        text_color="#f39c12")
+            self._dev_mgr_btn.configure(text=f"🗺  Device Manager  ({count})",
+                                        text_color="#F0D090")
         else:
-            self._dev_mgr_btn.configure(text="Device Manager",
-                                        text_color=["#DCE4EE", "#DCE4EE"])
+            self._dev_mgr_btn.configure(text="🗺  Device Manager",
+                                        text_color=["#FFFFFF", "#F0E0C0"])
 
     # ── run / stop ────────────────────────────────────────────────────────────
 

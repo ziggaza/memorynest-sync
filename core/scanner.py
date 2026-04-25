@@ -5,6 +5,8 @@ Skips:
   - Hidden files/folders (starting with ".")
   - System files (Thumbs.db, .DS_Store, desktop.ini, *.txt, *.db)
   - The destination root itself (prevent scanning own output)
+  - Source folders that are subsets of an already-queued source
+    (prevents files being scanned twice when user adds overlapping paths)
 """
 
 import os
@@ -29,18 +31,38 @@ def scan(
 ) -> Generator[Path, None, None]:
     """
     Yield every media file found in *sources* (recursively).
-    Skips the dest_root tree to avoid scanning already-organized files.
+
+    Guards:
+    - Skips the dest_root tree to avoid scanning already-organised files.
+    - Deduplicates overlapping source paths:
+        • If source B is a subdirectory of already-queued source A, B is skipped
+          (A's walk will cover it anyway).
+        • If source A is a subdirectory of newly-added source B, A is removed and
+          replaced by B (broader coverage wins).
+      This prevents files from being counted / processed twice when the user
+      accidentally adds a parent folder AND one of its children.
     """
     from core.classifier import classify, UNKNOWN
 
-    seen_dirs: set[Path] = set()
     dest_resolved = dest_root.resolve() if dest_root else None
 
-    for source in sources:
-        source = Path(source).resolve()
-        if not source.exists():
+    # ── deduplicate / normalise source list ───────────────────────────────────
+    effective: list[Path] = []
+    for raw in sources:
+        src = Path(raw).resolve()
+        if not src.exists():
             continue
 
+        # Skip if already covered by a queued root (src is child of existing)
+        if any(src == q or _is_under(src, q) for q in effective):
+            continue
+
+        # Remove previously queued roots that are now covered by this broader src
+        effective = [q for q in effective if not _is_under(q, src)]
+        effective.append(src)
+
+    # ── walk ──────────────────────────────────────────────────────────────────
+    for source in effective:
         for root, dirs, files in os.walk(source, followlinks=False):
             root_path = Path(root)
 

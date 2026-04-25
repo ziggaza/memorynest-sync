@@ -22,9 +22,10 @@ _STATUS_DONE = frozenset({"moved", "duplicate"})
 
 
 class Checkpoint:
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, dry_run: bool = False) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db_path = db_path
+        self._dry_run = dry_run
         # one connection per thread to avoid SQLite threading issues
         self._local = threading.local()
         self._create_tables()
@@ -46,6 +47,8 @@ class Checkpoint:
         dest_path: Optional[Path] = None,
         error_msg: str = "",
     ) -> None:
+        if self._dry_run:
+            return   # do NOT pollute progress.db during a preview run
         self._con.execute(
             """
             INSERT INTO progress (src_path, status, dest_path, error_msg, processed_at)

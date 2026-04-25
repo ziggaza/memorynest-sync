@@ -1,4 +1,4 @@
-"""Configure root logger: rotating file + console."""
+"""Configure root logger: daily rotating file + console."""
 
 import logging
 import logging.handlers
@@ -7,15 +7,23 @@ from pathlib import Path
 
 def setup(log_dir: Path, level: int = logging.INFO) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "organizer.log"
 
     fmt = logging.Formatter(
         "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    # Rotate at midnight, keep 30 days, filename: organizer_YYYY-MM-DD.log
+    file_handler = logging.handlers.TimedRotatingFileHandler(
+        log_dir / "organizer.log",
+        when="midnight",
+        interval=1,
+        backupCount=30,
+        encoding="utf-8",
+    )
+    file_handler.suffix = "%Y-%m-%d"
+    file_handler.namer  = lambda name: name.replace(
+        "organizer.log.", "organizer_"
     )
     file_handler.setFormatter(fmt)
 

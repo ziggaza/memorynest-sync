@@ -121,7 +121,8 @@ class Organizer:
         hash_db = db_dir / "hashes.db"
         ckpt_db = db_dir / "progress.db"
 
-        with Deduplicator(hash_db) as dedup, Checkpoint(ckpt_db) as ckpt:
+        with Deduplicator(hash_db, dry_run=self._dry_run) as dedup, \
+             Checkpoint(ckpt_db, dry_run=self._dry_run) as ckpt:
             session_id = ckpt.start_session()
 
             # ── 1. scan ──────────────────────────────────────────────────────
@@ -273,7 +274,7 @@ class Organizer:
                 stats.duplicates += 1
                 logger.info("DUPE  %s  (original: %s)", src.name, dupe.original_path)
                 if not self._dry_run:
-                    self._do_move(src, dest)
+                    self._do_transfer(src, dest)
                 ckpt.record(src, "duplicate", dest)
                 self._emit(evt)
                 return
