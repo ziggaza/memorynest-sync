@@ -81,6 +81,40 @@ def _tc() -> dict:
     }
 
 
+def _center_on_parent(window, parent) -> None:
+    """Position *window* centered over *parent*'s current screen rect.
+
+    Uses `winfo_rootx/y` so it correctly follows the parent to whichever
+    monitor the user has dragged it to (multi-display setups). Should be
+    called after `geometry(...)` is set but before the window is shown.
+
+    Falls back to parsing the geometry string when widgets haven't been
+    laid out yet (winfo_width() can return 1 in that case).
+    """
+    try:
+        window.update_idletasks()
+        ww = window.winfo_width()
+        wh = window.winfo_height()
+        # Window not yet sized — parse declared geometry "WxH+X+Y" or "WxH"
+        if ww <= 1 or wh <= 1:
+            geo = window.geometry()
+            try:
+                size_part = geo.split("+")[0].split("-")[0]
+                ww, wh = (int(v) for v in size_part.split("x"))
+            except Exception:
+                ww, wh = 600, 400
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        # Centre, but keep at least a small margin from parent edge
+        x = px + max(0, (pw - ww) // 2)
+        y = py + max(0, (ph - wh) // 2)
+        window.geometry(f"+{x}+{y}")
+    except Exception:
+        pass
+
+
 def _apply_icon(window: ctk.CTkToplevel) -> None:
     """Set the app icon on a CTkToplevel.
     CTkToplevel calls _windows_set_titlebar_icon() via after(200, ...) which
@@ -111,6 +145,7 @@ class DeviceManagerDialog(ctk.CTkToplevel):
         # rows: (key_entry, val_entry, is_auto_label)
         self._rows: list[tuple[ctk.CTkEntry, ctk.CTkEntry]] = []
         self._build()
+        _center_on_parent(self, parent)
         self.grab_set()
 
     def _build(self):
@@ -254,6 +289,7 @@ class FolderStructureDialog(ctk.CTkToplevel):
         }
         self._row_frames: list[ctk.CTkFrame] = []
         self._build()
+        _center_on_parent(self, parent)
         self.grab_set()
 
     # ── build ──────────────────────────────────────────────────────────────────
@@ -417,6 +453,7 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         self._sel_idx = 0
 
         self._build()
+        _center_on_parent(self, parent)
         self.grab_set()
         if self._cats:
             self._select(0)
@@ -674,6 +711,7 @@ class ResetDedupDialog(ctk.CTkToplevel):
         self._also_ckpt   = tk.BooleanVar(value=True)
         self._resolve_dbs()
         self._build()
+        _center_on_parent(self, parent)
         self.grab_set()
 
     # ── resolve ───────────────────────────────────────────────────────────────
@@ -949,6 +987,7 @@ class _ConfirmResetDialog(ctk.CTkToplevel):
         self.transient(parent)
         self.result = False
         self._build(targets, dest_path)
+        _center_on_parent(self, parent)
         self.grab_set()
         self.wait_window()
 
@@ -1058,10 +1097,11 @@ class SummaryReportDialog(ctk.CTkToplevel):
     def __init__(self, parent, stats: dict, op_word: str):
         super().__init__(parent)
         self.title("Run Summary")
-        self.geometry("520x460")
+        self.geometry("540x560")
         self.resizable(False, False)
         _apply_icon(self)
         self._build(stats, op_word)
+        _center_on_parent(self, parent)
         self.grab_set()
 
     def _build(self, stats: dict, op_word: str):
@@ -1195,6 +1235,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self._sound    = sound
         self._on_save  = on_save
         self._build()
+        _center_on_parent(self, parent)
         self.grab_set()
 
     # ── build UI ──────────────────────────────────────────────────────────────
