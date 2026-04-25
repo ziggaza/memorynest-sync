@@ -16,6 +16,7 @@ import customtkinter as ctk
 from core.log_setup import setup as log_setup
 from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
+from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
 APP_VERSION  = "1.0.0"
 
@@ -38,8 +39,14 @@ except Exception:
 
 # ── settings helpers ───────────────────────────────────────────────────────────
 _DEFAULT_SETTINGS = {
-    "theme": "dark",
-    "operation": "copy",
+    "theme":          "dark",
+    "operation":      "copy",
+    # sound system (added v1.1)
+    "sound_enabled":  False,         # off by default — opt-in
+    "sound_theme":    "nature",      # "nature" | "minimal" | "none"
+    "sound_volume":   0.6,           # 0.0 – 1.0
+    # notifications (added v1.1)
+    "notify_on_done": True,
 }
 
 def load_settings() -> dict:
@@ -1039,6 +1046,221 @@ class _ConfirmResetDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Settings dialog ───────────────────────────────────────────────────────────
+
+class SettingsDialog(ctk.CTkToplevel):
+    """Unified preferences — appearance, sound, notifications."""
+
+    def __init__(self, parent, settings: dict, sound: SoundEngine, on_save):
+        super().__init__(parent)
+        self.title("Settings")
+        self.geometry("520x620")
+        self.resizable(False, False)
+        _apply_icon(self)
+
+        self._settings = dict(settings)   # work on a copy
+        self._sound    = sound
+        self._on_save  = on_save
+        self._build()
+        self.grab_set()
+
+    # ── build UI ──────────────────────────────────────────────────────────────
+
+    def _build(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # ── header ──
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="⚙  Settings",
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color=("#FFFFFF", "#F0D090")
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        ctk.CTkLabel(hdr, text="Appearance · Sound · Notifications",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#F0D090", "#9A8060")
+                     ).pack(padx=20, pady=(0, 14), anchor="w")
+
+        # ── scrollable body ──
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        body.grid_columnconfigure(0, weight=1)
+
+        self._section(body, "🎨  Appearance")
+        self._build_appearance(body)
+
+        self._section(body, "🔊  Sound")
+        self._build_sound(body)
+
+        self._section(body, "🔔  Notifications")
+        self._build_notifications(body)
+
+        self._section(body, "🌐  Language")
+        self._build_language(body)
+
+        # ── fixed bottom buttons ──
+        bottom = ctk.CTkFrame(self, corner_radius=0,
+                              fg_color=("#D8CDB8", "#231C14"))
+        bottom.grid(row=2, column=0, sticky="ew")
+        bottom.grid_columnconfigure(0, weight=1)
+
+        bb = ctk.CTkFrame(bottom, fg_color="transparent")
+        bb.grid(row=0, column=0, padx=20, pady=14, sticky="e")
+
+        ctk.CTkButton(bb, text="Cancel", width=100,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(bb, text="💾  Save", width=120,
+                      command=self._save
+                      ).pack(side="left")
+
+    def _section(self, parent, title: str):
+        ctk.CTkLabel(parent, text=title,
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=("#7A4A10", "#E0A030")
+                     ).pack(padx=18, pady=(14, 6), anchor="w")
+
+    def _card(self, parent) -> ctk.CTkFrame:
+        c = ctk.CTkFrame(parent, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+        c.pack(fill="x", padx=18, pady=(0, 4))
+        return c
+
+    # ── appearance section ────────────────────────────────────────────────────
+
+    def _build_appearance(self, parent):
+        c = self._card(parent)
+        ctk.CTkLabel(c, text="Theme",
+                     font=ctk.CTkFont(size=12)
+                     ).pack(padx=14, pady=(12, 4), anchor="w")
+        self._theme_var = tk.StringVar(value=self._settings.get("theme", "dark"))
+        row = ctk.CTkFrame(c, fg_color="transparent")
+        row.pack(padx=14, pady=(0, 12), anchor="w")
+        for value, label in (("dark", "🌙 Dark"),
+                             ("light", "☀ Light"),
+                             ("system", "🖥 System")):
+            ctk.CTkRadioButton(row, text=label, variable=self._theme_var,
+                               value=value
+                               ).pack(side="left", padx=(0, 16))
+
+    # ── sound section ─────────────────────────────────────────────────────────
+
+    def _build_sound(self, parent):
+        c = self._card(parent)
+
+        # enable toggle
+        self._snd_enabled = tk.BooleanVar(
+            value=self._settings.get("sound_enabled", False))
+        ctk.CTkCheckBox(c, text="Enable sound effects",
+                        variable=self._snd_enabled,
+                        font=ctk.CTkFont(size=12)
+                        ).pack(padx=14, pady=(12, 8), anchor="w")
+
+        # theme dropdown
+        theme_row = ctk.CTkFrame(c, fg_color="transparent")
+        theme_row.pack(fill="x", padx=14, pady=(0, 8))
+        ctk.CTkLabel(theme_row, text="Theme",
+                     font=ctk.CTkFont(size=12), width=80, anchor="w"
+                     ).pack(side="left")
+        self._snd_theme = tk.StringVar(
+            value=self._settings.get("sound_theme", "nature"))
+        ctk.CTkOptionMenu(theme_row, variable=self._snd_theme,
+                          values=["nature", "minimal", "none"],
+                          width=140
+                          ).pack(side="left", padx=(8, 0))
+
+        # volume slider
+        vol_row = ctk.CTkFrame(c, fg_color="transparent")
+        vol_row.pack(fill="x", padx=14, pady=(0, 8))
+        ctk.CTkLabel(vol_row, text="Volume",
+                     font=ctk.CTkFont(size=12), width=80, anchor="w"
+                     ).pack(side="left")
+        self._snd_vol = tk.DoubleVar(
+            value=self._settings.get("sound_volume", 0.6))
+        self._vol_lbl = ctk.CTkLabel(vol_row,
+                                     text=f"{int(self._snd_vol.get()*100)}%",
+                                     font=ctk.CTkFont(size=11), width=40)
+        self._vol_lbl.pack(side="right")
+        ctk.CTkSlider(vol_row, from_=0, to=1, variable=self._snd_vol,
+                      command=lambda v: self._vol_lbl.configure(
+                          text=f"{int(float(v)*100)}%")
+                      ).pack(side="left", fill="x", expand=True, padx=(8, 8))
+
+        # preview buttons
+        prev_row = ctk.CTkFrame(c, fg_color="transparent")
+        prev_row.pack(fill="x", padx=14, pady=(4, 12))
+        ctk.CTkLabel(prev_row, text="Test:",
+                     font=ctk.CTkFont(size=12), width=80, anchor="w"
+                     ).pack(side="left")
+        for evt, label in (("start", "▶ Start"),
+                           ("complete", "✓ Done"),
+                           ("error", "⚠ Error")):
+            ctk.CTkButton(prev_row, text=label, width=80, height=26,
+                          fg_color=("#7A5535", "#3D3020"),
+                          hover_color=("#9A7050", "#4D4028"),
+                          command=lambda e=evt: self._preview(e)
+                          ).pack(side="left", padx=(4, 0))
+
+        # hint
+        ctk.CTkLabel(c,
+                     text="Sounds are synthesized — no internet or assets needed.",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray55")
+                     ).pack(padx=14, pady=(0, 10), anchor="w")
+
+    def _preview(self, event: str):
+        # apply volume to engine before preview so user hears the new level
+        self._sound.configure(
+            enabled=True,
+            theme=self._snd_theme.get(),
+            volume=self._snd_vol.get(),
+        )
+        self._sound.preview(self._snd_theme.get(), event)
+
+    # ── notifications section ─────────────────────────────────────────────────
+
+    def _build_notifications(self, parent):
+        c = self._card(parent)
+        self._notify_var = tk.BooleanVar(
+            value=self._settings.get("notify_on_done", True))
+        ctk.CTkCheckBox(c,
+                        text="Show system notification when run finishes",
+                        variable=self._notify_var,
+                        font=ctk.CTkFont(size=12)
+                        ).pack(padx=14, pady=(12, 4), anchor="w")
+        ctk.CTkLabel(c,
+                     text="Useful when the window is minimised or in the system tray.",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray55")
+                     ).pack(padx=14, pady=(0, 12), anchor="w")
+
+    # ── language section ──────────────────────────────────────────────────────
+
+    def _build_language(self, parent):
+        c = self._card(parent)
+        ctk.CTkLabel(c, text="Interface language",
+                     font=ctk.CTkFont(size=12)
+                     ).pack(padx=14, pady=(12, 4), anchor="w")
+        ctk.CTkLabel(c,
+                     text="🇬🇧  English  (Thai coming in v2.0)",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray45", "gray55")
+                     ).pack(padx=14, pady=(0, 12), anchor="w")
+
+    # ── save ──────────────────────────────────────────────────────────────────
+
+    def _save(self):
+        self._settings["theme"]          = self._theme_var.get()
+        self._settings["sound_enabled"]  = self._snd_enabled.get()
+        self._settings["sound_theme"]    = self._snd_theme.get()
+        self._settings["sound_volume"]   = round(self._snd_vol.get(), 2)
+        self._settings["notify_on_done"] = self._notify_var.get()
+        self._on_save(self._settings)
+        self.destroy()
+
+
 # ── splash screen ─────────────────────────────────────────────────────────────
 
 class SplashScreen(tk.Toplevel):
@@ -1172,10 +1394,47 @@ class App(ctk.CTk):
         ctk.set_appearance_mode(self._settings.get("theme", "dark"))
         ctk.set_default_color_theme(str(BASE_DIR / "assets" / "nest_theme.json"))
 
+        # sound engine (renders WAVs on first launch — quiet by default)
+        self._sound = SoundEngine(BASE_DIR / "assets" / "sounds")
+        self._apply_sound_settings()
+
         self._build_layout()
         self._poll_events()
         self._setup_tray()
         SplashScreen(self, self.deiconify)
+
+    # ── sound helpers ─────────────────────────────────────────────────────────
+
+    def _apply_sound_settings(self):
+        self._sound.configure(
+            enabled = self._settings.get("sound_enabled", False),
+            theme   = self._settings.get("sound_theme", "nature"),
+            volume  = self._settings.get("sound_volume", 0.6),
+        )
+
+    def _play_sound(self, event: str):
+        try:
+            self._sound.play(event)
+        except Exception:
+            pass
+
+    def _maybe_notify(self, stats: dict):
+        """Show system tray balloon when run finishes (only if window not focused)."""
+        try:
+            # don't notify when user is actively watching the window
+            if self.focus_displayof() is not None and self.state() == "normal":
+                return
+            if not self._tray_icon:
+                return
+            moved = stats.get("moved", 0)
+            dupes = stats.get("duplicates", 0)
+            errs  = stats.get("errors", 0)
+            title = "MemoryNest Sync — Run finished"
+            msg   = (f"Moved/Copied: {moved:,}  ·  Duplicates: {dupes:,}"
+                     + (f"  ·  Errors: {errs:,}" if errs else ""))
+            self._tray_icon.notify(msg, title)
+        except Exception:
+            pass
 
     # ── system tray ───────────────────────────────────────────────────────────
 
@@ -1253,7 +1512,15 @@ class App(ctk.CTk):
             fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
             font=ctk.CTkFont(size=13),
             command=self._cycle_theme)
-        self._theme_btn.grid(row=0, column=2, padx=(0, 12), pady=6)
+        self._theme_btn.grid(row=0, column=2, padx=(0, 6), pady=6)
+
+        # settings (gear) button
+        ctk.CTkButton(
+            bar, text="⚙", width=36, height=28,
+            fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
+            font=ctk.CTkFont(size=15),
+            command=self._open_settings
+            ).grid(row=0, column=3, padx=(0, 12), pady=6)
 
     def _theme_icon(self) -> str:
         icons = {"dark": "🌙  Dark", "light": "☀️  Light", "system": "🖥  System"}
@@ -1604,6 +1871,21 @@ class App(ctk.CTk):
     def _open_reset_dedup(self):
         ResetDedupDialog(self, self._dest_var.get())
 
+    def _open_settings(self):
+        SettingsDialog(self, self._settings, self._sound,
+                       on_save=self._apply_new_settings)
+
+    def _apply_new_settings(self, new_settings: dict):
+        old_theme = self._settings.get("theme")
+        self._settings = new_settings
+        save_settings(self._settings)
+        # apply changes live
+        if new_settings.get("theme") != old_theme:
+            ctk.set_appearance_mode(new_settings["theme"])
+            self._theme_btn.configure(text=self._theme_icon())
+            self._apply_listbox_theme()
+        self._apply_sound_settings()
+
     def _reload_config(self, new_cfg: dict):
         self._config = new_cfg
         self._update_badge()
@@ -1667,6 +1949,7 @@ class App(ctk.CTk):
         self._reset_ui()
         self._btn_start.configure(state="disabled")
         self._btn_stop.configure(state="normal")
+        self._play_sound("start")
 
         self._organizer = Organizer(
             config    = self._config,
@@ -1776,6 +2059,14 @@ class App(ctk.CTk):
                               f"elapsed:{elapsed:.1f}s  {speed}")
                     self._btn_start.configure(state="normal")
                     self._btn_stop.configure(state="disabled")
+
+                    # play completion sound — error tone if any errors, else complete
+                    err_count = s.get("errors", 0)
+                    self._play_sound("error" if err_count else "complete")
+
+                    # system notification (if enabled and window is hidden/minimised)
+                    if self._settings.get("notify_on_done", True):
+                        self._maybe_notify(s)
 
                     # auto-save unresolved devices → no popup
                     if self._organizer:
