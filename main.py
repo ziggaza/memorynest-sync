@@ -16,8 +16,9 @@ import customtkinter as ctk
 from core.log_setup import setup as log_setup
 from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
+from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.0.0"
+APP_VERSION  = "1.1.0"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
@@ -38,8 +39,14 @@ except Exception:
 
 # ── settings helpers ───────────────────────────────────────────────────────────
 _DEFAULT_SETTINGS = {
-    "theme": "dark",
-    "operation": "copy",
+    "theme":          "dark",
+    "operation":      "copy",
+    # sound system (added v1.1)
+    "sound_enabled":  False,         # off by default — opt-in
+    "sound_theme":    "nature",      # "nature" | "minimal" | "none"
+    "sound_volume":   0.6,           # 0.0 – 1.0
+    # notifications (added v1.1)
+    "notify_on_done": True,
 }
 
 def load_settings() -> dict:
@@ -1039,6 +1046,354 @@ class _ConfirmResetDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Visual Summary Report (shown after run completes) ────────────────────────
+
+class SummaryReportDialog(ctk.CTkToplevel):
+    """Friendly post-run summary — emoji-rich, single click to dismiss.
+
+    Uses the warm-nest palette plus a subtle entrance fade. Headline lines
+    are written in plain English (i18n in v2.0 will replace them).
+    """
+
+    def __init__(self, parent, stats: dict, op_word: str):
+        super().__init__(parent)
+        self.title("Run Summary")
+        self.geometry("520x460")
+        self.resizable(False, False)
+        _apply_icon(self)
+        self._build(stats, op_word)
+        self.grab_set()
+
+    def _build(self, stats: dict, op_word: str):
+        self.grid_columnconfigure(0, weight=1)
+
+        moved   = stats.get("moved", 0)
+        dupes   = stats.get("duplicates", 0)
+        errs    = stats.get("errors", 0)
+        skipped = stats.get("skipped", 0)
+        resumed = stats.get("resumed", 0)
+        total   = stats.get("total", 0)
+        elapsed = stats.get("elapsed_sec", 0) or 1
+        speed   = total / elapsed if elapsed > 0 else 0
+
+        # ── headline (color-coded by outcome) ──
+        if errs == 0 and total > 0:
+            head_text  = "🎉  Memories organized!"
+            head_color = ("#FFFFFF", "#F0D090")
+            head_bg    = ("#7AB648", "#2A6A2A")
+        elif total == 0:
+            head_text  = "🤔  No files found"
+            head_color = ("#FFFFFF", "#F0D090")
+            head_bg    = ("#9A8060", "#5A4530")
+        else:
+            head_text  = "⚠  Finished with issues"
+            head_color = ("#FFFFFF", "#FFD0C0")
+            head_bg    = ("#B83828", "#7A1818")
+
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=head_bg)
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text=head_text,
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=head_color
+                     ).pack(padx=24, pady=(18, 4), anchor="w")
+        ctk.CTkLabel(hdr,
+                     text=f"{op_word}  ·  {self._fmt_elapsed(elapsed)}  ·  "
+                          f"{speed:.1f} files/s",
+                     font=ctk.CTkFont(size=11),
+                     text_color=head_color
+                     ).pack(padx=24, pady=(0, 16), anchor="w")
+
+        # ── stats grid (2 columns × 3 rows) ──
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=24, pady=(20, 12))
+        body.grid_columnconfigure((0, 1), weight=1)
+
+        rows = [
+            ("📁", "Files processed",    f"{moved:,}",          "#7AB648"),
+            ("📦", "Total scanned",      f"{total:,}",          "#C8882A"),
+            ("🗂", "Duplicates found",   f"{dupes:,}",          "#D4A030"),
+            ("⏩", "Resumed (skipped)",  f"{resumed:,}",        "#9A8060"),
+            ("⚠", "Errors",             f"{errs:,}",           "#D45030"),
+            ("💤", "Skipped (unknown)",  f"{skipped:,}",        "#7A6850"),
+        ]
+        for i, (icon, label, value, accent) in enumerate(rows):
+            r, c = divmod(i, 2)
+            self._stat_card(body, r, c, icon, label, value, accent)
+
+        # ── friendly closing line ──
+        if total > 0 and errs == 0:
+            tag = self._pick_friendly_tag(moved, dupes)
+            ctk.CTkLabel(self, text=tag,
+                         font=ctk.CTkFont(size=11),
+                         text_color=("#7A4A10", "#C8A060")
+                         ).grid(row=2, column=0, padx=24, pady=(0, 8), sticky="w")
+
+        # ── close button ──
+        bb = ctk.CTkFrame(self, fg_color="transparent")
+        bb.grid(row=3, column=0, padx=24, pady=(4, 18), sticky="e")
+        ctk.CTkButton(bb, text="✓  Got it", width=120,
+                      command=self.destroy
+                      ).pack()
+
+    def _stat_card(self, parent, r, c, icon, label, value, accent):
+        f = ctk.CTkFrame(parent, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+        f.grid(row=r, column=c, padx=4, pady=4, sticky="ew", ipady=4)
+        # accent strip
+        ctk.CTkFrame(f, height=3, corner_radius=2, fg_color=accent
+                     ).pack(fill="x", padx=6, pady=(4, 0))
+        row = ctk.CTkFrame(f, fg_color="transparent")
+        row.pack(fill="x", padx=10, pady=(4, 8))
+        ctk.CTkLabel(row, text=icon, font=ctk.CTkFont(size=16)
+                     ).pack(side="left")
+        col = ctk.CTkFrame(row, fg_color="transparent")
+        col.pack(side="left", padx=(8, 0), fill="x", expand=True)
+        ctk.CTkLabel(col, text=value,
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=("#5A3A10", "#F0D090"), anchor="w"
+                     ).pack(anchor="w")
+        ctk.CTkLabel(col, text=label,
+                     font=ctk.CTkFont(size=10),
+                     text_color=("#8A7055", "#9A8060"), anchor="w"
+                     ).pack(anchor="w")
+
+    @staticmethod
+    def _fmt_elapsed(sec: float) -> str:
+        if sec < 60:
+            return f"{sec:.0f}s"
+        if sec < 3600:
+            return f"{int(sec // 60)}m {int(sec % 60)}s"
+        h = int(sec // 3600)
+        m = int((sec % 3600) // 60)
+        return f"{h}h {m}m"
+
+    @staticmethod
+    def _pick_friendly_tag(moved: int, dupes: int) -> str:
+        if dupes >= moved and dupes > 0:
+            return f"🪺  Caught {dupes:,} duplicates — your destination stayed tidy."
+        if moved >= 10_000:
+            return "🪺  A small archive made huge — well done."
+        if moved >= 1_000:
+            return "🪺  A meaningful batch organized in one go."
+        if moved > 0:
+            return "🪺  Every memory has its place now."
+        return "🪺  Nothing new this time."
+
+
+# ── Settings dialog ───────────────────────────────────────────────────────────
+
+class SettingsDialog(ctk.CTkToplevel):
+    """Unified preferences — appearance, sound, notifications."""
+
+    def __init__(self, parent, settings: dict, sound: SoundEngine, on_save):
+        super().__init__(parent)
+        self.title("Settings")
+        self.geometry("520x620")
+        self.resizable(False, False)
+        _apply_icon(self)
+
+        self._settings = dict(settings)   # work on a copy
+        self._sound    = sound
+        self._on_save  = on_save
+        self._build()
+        self.grab_set()
+
+    # ── build UI ──────────────────────────────────────────────────────────────
+
+    def _build(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # ── header ──
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="⚙  Settings",
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color=("#FFFFFF", "#F0D090")
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        ctk.CTkLabel(hdr, text="Appearance · Sound · Notifications",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#F0D090", "#9A8060")
+                     ).pack(padx=20, pady=(0, 14), anchor="w")
+
+        # ── scrollable body ──
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        body.grid_columnconfigure(0, weight=1)
+
+        self._section(body, "🎨  Appearance")
+        self._build_appearance(body)
+
+        self._section(body, "🔊  Sound")
+        self._build_sound(body)
+
+        self._section(body, "🔔  Notifications")
+        self._build_notifications(body)
+
+        self._section(body, "🌐  Language")
+        self._build_language(body)
+
+        # ── fixed bottom buttons ──
+        bottom = ctk.CTkFrame(self, corner_radius=0,
+                              fg_color=("#D8CDB8", "#231C14"))
+        bottom.grid(row=2, column=0, sticky="ew")
+        bottom.grid_columnconfigure(0, weight=1)
+
+        bb = ctk.CTkFrame(bottom, fg_color="transparent")
+        bb.grid(row=0, column=0, padx=20, pady=14, sticky="e")
+
+        ctk.CTkButton(bb, text="Cancel", width=100,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(bb, text="💾  Save", width=120,
+                      command=self._save
+                      ).pack(side="left")
+
+    def _section(self, parent, title: str):
+        ctk.CTkLabel(parent, text=title,
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=("#7A4A10", "#E0A030")
+                     ).pack(padx=18, pady=(14, 6), anchor="w")
+
+    def _card(self, parent) -> ctk.CTkFrame:
+        c = ctk.CTkFrame(parent, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+        c.pack(fill="x", padx=18, pady=(0, 4))
+        return c
+
+    # ── appearance section ────────────────────────────────────────────────────
+
+    def _build_appearance(self, parent):
+        c = self._card(parent)
+        ctk.CTkLabel(c, text="Theme",
+                     font=ctk.CTkFont(size=12)
+                     ).pack(padx=14, pady=(12, 4), anchor="w")
+        self._theme_var = tk.StringVar(value=self._settings.get("theme", "dark"))
+        row = ctk.CTkFrame(c, fg_color="transparent")
+        row.pack(padx=14, pady=(0, 12), anchor="w")
+        for value, label in (("dark", "🌙 Dark"),
+                             ("light", "☀ Light"),
+                             ("system", "🖥 System")):
+            ctk.CTkRadioButton(row, text=label, variable=self._theme_var,
+                               value=value
+                               ).pack(side="left", padx=(0, 16))
+
+    # ── sound section ─────────────────────────────────────────────────────────
+
+    def _build_sound(self, parent):
+        c = self._card(parent)
+
+        # enable toggle
+        self._snd_enabled = tk.BooleanVar(
+            value=self._settings.get("sound_enabled", False))
+        ctk.CTkCheckBox(c, text="Enable sound effects",
+                        variable=self._snd_enabled,
+                        font=ctk.CTkFont(size=12)
+                        ).pack(padx=14, pady=(12, 8), anchor="w")
+
+        # theme dropdown
+        theme_row = ctk.CTkFrame(c, fg_color="transparent")
+        theme_row.pack(fill="x", padx=14, pady=(0, 8))
+        ctk.CTkLabel(theme_row, text="Theme",
+                     font=ctk.CTkFont(size=12), width=80, anchor="w"
+                     ).pack(side="left")
+        self._snd_theme = tk.StringVar(
+            value=self._settings.get("sound_theme", "nature"))
+        ctk.CTkOptionMenu(theme_row, variable=self._snd_theme,
+                          values=["nature", "minimal", "none"],
+                          width=140
+                          ).pack(side="left", padx=(8, 0))
+
+        # volume slider
+        vol_row = ctk.CTkFrame(c, fg_color="transparent")
+        vol_row.pack(fill="x", padx=14, pady=(0, 8))
+        ctk.CTkLabel(vol_row, text="Volume",
+                     font=ctk.CTkFont(size=12), width=80, anchor="w"
+                     ).pack(side="left")
+        self._snd_vol = tk.DoubleVar(
+            value=self._settings.get("sound_volume", 0.6))
+        self._vol_lbl = ctk.CTkLabel(vol_row,
+                                     text=f"{int(self._snd_vol.get()*100)}%",
+                                     font=ctk.CTkFont(size=11), width=40)
+        self._vol_lbl.pack(side="right")
+        ctk.CTkSlider(vol_row, from_=0, to=1, variable=self._snd_vol,
+                      command=lambda v: self._vol_lbl.configure(
+                          text=f"{int(float(v)*100)}%")
+                      ).pack(side="left", fill="x", expand=True, padx=(8, 8))
+
+        # preview buttons
+        prev_row = ctk.CTkFrame(c, fg_color="transparent")
+        prev_row.pack(fill="x", padx=14, pady=(4, 12))
+        ctk.CTkLabel(prev_row, text="Test:",
+                     font=ctk.CTkFont(size=12), width=80, anchor="w"
+                     ).pack(side="left")
+        for evt, label in (("start", "▶ Start"),
+                           ("complete", "✓ Done"),
+                           ("error", "⚠ Error")):
+            ctk.CTkButton(prev_row, text=label, width=80, height=26,
+                          fg_color=("#7A5535", "#3D3020"),
+                          hover_color=("#9A7050", "#4D4028"),
+                          command=lambda e=evt: self._preview(e)
+                          ).pack(side="left", padx=(4, 0))
+
+        # hint
+        ctk.CTkLabel(c,
+                     text="Sounds are synthesized — no internet or assets needed.",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray55")
+                     ).pack(padx=14, pady=(0, 10), anchor="w")
+
+    def _preview(self, event: str):
+        # apply volume to engine before preview so user hears the new level
+        self._sound.configure(
+            enabled=True,
+            theme=self._snd_theme.get(),
+            volume=self._snd_vol.get(),
+        )
+        self._sound.preview(self._snd_theme.get(), event)
+
+    # ── notifications section ─────────────────────────────────────────────────
+
+    def _build_notifications(self, parent):
+        c = self._card(parent)
+        self._notify_var = tk.BooleanVar(
+            value=self._settings.get("notify_on_done", True))
+        ctk.CTkCheckBox(c,
+                        text="Show system notification when run finishes",
+                        variable=self._notify_var,
+                        font=ctk.CTkFont(size=12)
+                        ).pack(padx=14, pady=(12, 4), anchor="w")
+        ctk.CTkLabel(c,
+                     text="Useful when the window is minimised or in the system tray.",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray55")
+                     ).pack(padx=14, pady=(0, 12), anchor="w")
+
+    # ── language section ──────────────────────────────────────────────────────
+
+    def _build_language(self, parent):
+        c = self._card(parent)
+        ctk.CTkLabel(c, text="Interface language",
+                     font=ctk.CTkFont(size=12)
+                     ).pack(padx=14, pady=(12, 4), anchor="w")
+        ctk.CTkLabel(c,
+                     text="🇬🇧  English  (Thai coming in v2.0)",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray45", "gray55")
+                     ).pack(padx=14, pady=(0, 12), anchor="w")
+
+    # ── save ──────────────────────────────────────────────────────────────────
+
+    def _save(self):
+        self._settings["theme"]          = self._theme_var.get()
+        self._settings["sound_enabled"]  = self._snd_enabled.get()
+        self._settings["sound_theme"]    = self._snd_theme.get()
+        self._settings["sound_volume"]   = round(self._snd_vol.get(), 2)
+        self._settings["notify_on_done"] = self._notify_var.get()
+        self._on_save(self._settings)
+        self.destroy()
+
+
 # ── splash screen ─────────────────────────────────────────────────────────────
 
 class SplashScreen(tk.Toplevel):
@@ -1168,14 +1523,59 @@ class App(ctk.CTk):
         self._cnt_errors      = 0
         self._cnt_resumed     = 0
 
+        # animation state (v1.1) — smooth interpolation toward targets
+        self._prog_target_overall = 0.0
+        self._prog_target_current = 0.0
+        self._pulse_phase = 0.0       # radians, advanced each tick when running
+        self._pulse_active = False    # True while a run is in progress
+
         # apply saved theme
         ctk.set_appearance_mode(self._settings.get("theme", "dark"))
         ctk.set_default_color_theme(str(BASE_DIR / "assets" / "nest_theme.json"))
 
+        # sound engine (renders WAVs on first launch — quiet by default)
+        self._sound = SoundEngine(BASE_DIR / "assets" / "sounds")
+        self._apply_sound_settings()
+
         self._build_layout()
         self._poll_events()
+        self._animate()                # micro-animation tick (~60 fps)
         self._setup_tray()
+        self._bind_shortcuts()
         SplashScreen(self, self.deiconify)
+
+    # ── sound helpers ─────────────────────────────────────────────────────────
+
+    def _apply_sound_settings(self):
+        self._sound.configure(
+            enabled = self._settings.get("sound_enabled", False),
+            theme   = self._settings.get("sound_theme", "nature"),
+            volume  = self._settings.get("sound_volume", 0.6),
+        )
+
+    def _play_sound(self, event: str):
+        try:
+            self._sound.play(event)
+        except Exception:
+            pass
+
+    def _maybe_notify(self, stats: dict):
+        """Show system tray balloon when run finishes (only if window not focused)."""
+        try:
+            # don't notify when user is actively watching the window
+            if self.focus_displayof() is not None and self.state() == "normal":
+                return
+            if not self._tray_icon:
+                return
+            moved = stats.get("moved", 0)
+            dupes = stats.get("duplicates", 0)
+            errs  = stats.get("errors", 0)
+            title = "MemoryNest Sync — Run finished"
+            msg   = (f"Moved/Copied: {moved:,}  ·  Duplicates: {dupes:,}"
+                     + (f"  ·  Errors: {errs:,}" if errs else ""))
+            self._tray_icon.notify(msg, title)
+        except Exception:
+            pass
 
     # ── system tray ───────────────────────────────────────────────────────────
 
@@ -1253,7 +1653,15 @@ class App(ctk.CTk):
             fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
             font=ctk.CTkFont(size=13),
             command=self._cycle_theme)
-        self._theme_btn.grid(row=0, column=2, padx=(0, 12), pady=6)
+        self._theme_btn.grid(row=0, column=2, padx=(0, 6), pady=6)
+
+        # settings (gear) button
+        ctk.CTkButton(
+            bar, text="⚙", width=36, height=28,
+            fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
+            font=ctk.CTkFont(size=15),
+            command=self._open_settings
+            ).grid(row=0, column=3, padx=(0, 12), pady=6)
 
     def _theme_icon(self) -> str:
         icons = {"dark": "🌙  Dark", "light": "☀️  Light", "system": "🖥  System"}
@@ -1604,6 +2012,42 @@ class App(ctk.CTk):
     def _open_reset_dedup(self):
         ResetDedupDialog(self, self._dest_var.get())
 
+    def _open_settings(self):
+        SettingsDialog(self, self._settings, self._sound,
+                       on_save=self._apply_new_settings)
+
+    # ── keyboard shortcuts ────────────────────────────────────────────────────
+
+    def _bind_shortcuts(self):
+        """Global accelerators. F1/F2/F3 are non-modifier so they don't
+        clash with text-entry shortcuts; Ctrl+R/Esc are conventional."""
+        self.bind("<Control-r>",      lambda _e: self._safe_start())
+        self.bind("<Control-R>",      lambda _e: self._safe_start())
+        self.bind("<Escape>",         lambda _e: self._safe_stop())
+        self.bind("<F1>",             lambda _e: self._open_device_manager())
+        self.bind("<F2>",             lambda _e: self._open_folder_structure())
+        self.bind("<F3>",             lambda _e: self._open_category_manager())
+        self.bind("<Control-comma>",  lambda _e: self._open_settings())
+
+    def _safe_start(self):
+        if self._btn_start.cget("state") == "normal":
+            self._start()
+
+    def _safe_stop(self):
+        if self._btn_stop.cget("state") == "normal":
+            self._stop()
+
+    def _apply_new_settings(self, new_settings: dict):
+        old_theme = self._settings.get("theme")
+        self._settings = new_settings
+        save_settings(self._settings)
+        # apply changes live
+        if new_settings.get("theme") != old_theme:
+            ctk.set_appearance_mode(new_settings["theme"])
+            self._theme_btn.configure(text=self._theme_icon())
+            self._apply_listbox_theme()
+        self._apply_sound_settings()
+
     def _reload_config(self, new_cfg: dict):
         self._config = new_cfg
         self._update_badge()
@@ -1667,6 +2111,7 @@ class App(ctk.CTk):
         self._reset_ui()
         self._btn_start.configure(state="disabled")
         self._btn_stop.configure(state="normal")
+        self._play_sound("start")
 
         self._organizer = Organizer(
             config    = self._config,
@@ -1727,14 +2172,16 @@ class App(ctk.CTk):
                 elif evt.kind == EventKind.PROGRESS:
                     idx   = evt.index
                     total = self._total_files or 1
-                    self._prog_overall.set(idx / total)
+                    # set targets — _animate() will interpolate smoothly
+                    self._prog_target_overall = idx / total
+                    self._prog_target_current = (idx % 20) / 20
                     self._prog_label.configure(text=f"{idx} / {total}")
                     if evt.files_per_sec > 0:
                         self._speed_label.configure(
                             text=f"{evt.files_per_sec:.1f} files/s")
                     fname = Path(evt.src_path).name
                     self._current_label.configure(text=fname)
-                    self._prog_current.set((idx % 20) / 20)
+                    self._pulse_active = True
 
                     if evt.status in ("moved", "copied", "dry_run"):
                         if evt.media_type == "Videos":
@@ -1763,9 +2210,15 @@ class App(ctk.CTk):
 
                 elif evt.kind == EventKind.DONE:
                     s = evt.stats
-                    self._prog_overall.set(1.0)
-                    self._prog_current.set(1.0)
-                    self._current_label.configure(text="Done")
+                    self._prog_target_overall = 1.0
+                    self._prog_target_current = 1.0
+                    self._pulse_active = False
+                    err_count = s.get("errors", 0)
+                    icon = "✓" if not err_count else "⚠"
+                    self._current_label.configure(
+                        text=f"{icon}  Done",
+                        text_color=("#2A6A2A", "#7AB648") if not err_count
+                                   else ("#9A3010", "#E07050"))
                     elapsed = s.get("elapsed_sec", 0)
                     total   = s.get("total", 0)
                     speed   = f"{total/elapsed:.1f} files/s" if elapsed > 0 else ""
@@ -1777,15 +2230,70 @@ class App(ctk.CTk):
                     self._btn_start.configure(state="normal")
                     self._btn_stop.configure(state="disabled")
 
+                    # play completion sound — error tone if any errors, else complete
+                    err_count = s.get("errors", 0)
+                    self._play_sound("error" if err_count else "complete")
+
+                    # system notification (if enabled and window is hidden/minimised)
+                    if self._settings.get("notify_on_done", True):
+                        self._maybe_notify(s)
+
                     # auto-save unresolved devices → no popup
                     if self._organizer:
                         self._auto_save_unresolved(
                             self._organizer._resolver.unresolved_devices)
 
+                    # visual summary report (only for real runs that processed files)
+                    if s.get("total", 0) > 0 and not self._dry_run_var.get():
+                        op_word = "Copied" if self._op_var.get() == "copy" else "Moved"
+                        self.after(300, lambda st=s, op=op_word:
+                                   SummaryReportDialog(self, st, op))
+
         except queue.Empty:
             pass
 
         self.after(80, self._poll_events)
+
+    # ── micro-animations (60 fps tick) ────────────────────────────────────────
+
+    def _animate(self):
+        """Smoothly interpolate progress bars toward their target values
+        and pulse the current-file label while a run is in progress.
+
+        Uses an ease-out curve (lerp at 18 % per frame) so motion feels
+        organic and never jumpy, regardless of how fast events arrive.
+        """
+        try:
+            # ── progress bars: ease toward target (lerp 18 % each frame) ──
+            cur_o = self._prog_overall.get()
+            cur_c = self._prog_current.get()
+            tgt_o = self._prog_target_overall
+            tgt_c = self._prog_target_current
+            if abs(tgt_o - cur_o) > 0.0005:
+                self._prog_overall.set(cur_o + (tgt_o - cur_o) * 0.18)
+            elif cur_o != tgt_o:
+                self._prog_overall.set(tgt_o)
+            if abs(tgt_c - cur_c) > 0.0005:
+                self._prog_current.set(cur_c + (tgt_c - cur_c) * 0.18)
+            elif cur_c != tgt_c:
+                self._prog_current.set(tgt_c)
+
+            # ── current-file label pulse glow while running ──
+            if self._pulse_active:
+                import math
+                self._pulse_phase = (self._pulse_phase + 0.12) % (2 * math.pi)
+                # 0..1 sine wave → blend amber gold for warm pulse
+                t = (math.sin(self._pulse_phase) + 1) * 0.5
+                # interpolate text colour between muted gray and amber
+                r = int(0x9A + (0xE0 - 0x9A) * t)
+                g = int(0x88 + (0xA0 - 0x88) * t)
+                b = int(0x70 + (0x30 - 0x70) * t)
+                self._current_label.configure(
+                    text_color=f"#{r:02X}{g:02X}{b:02X}")
+        except Exception:
+            pass
+
+        self.after(16, self._animate)   # ~60 fps
 
     # ── log helpers ───────────────────────────────────────────────────────────
 
@@ -1804,9 +2312,13 @@ class App(ctk.CTk):
         self._clear_log()
         self._prog_overall.set(0)
         self._prog_current.set(0)
+        self._prog_target_overall = 0.0
+        self._prog_target_current = 0.0
+        self._pulse_active = False
         self._prog_label.configure(text="0 / 0")
         self._speed_label.configure(text="")
-        self._current_label.configure(text="—")
+        self._current_label.configure(text="—",
+                                      text_color=("gray50", "gray60"))
         for v in self._stat_vars.values():
             v.set("—")
         self._cnt_photos = self._cnt_videos = self._cnt_dupes = 0
