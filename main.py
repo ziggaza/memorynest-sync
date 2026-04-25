@@ -1390,6 +1390,12 @@ class App(ctk.CTk):
         self._cnt_errors      = 0
         self._cnt_resumed     = 0
 
+        # animation state (v1.1) — smooth interpolation toward targets
+        self._prog_target_overall = 0.0
+        self._prog_target_current = 0.0
+        self._pulse_phase = 0.0       # radians, advanced each tick when running
+        self._pulse_active = False    # True while a run is in progress
+
         # apply saved theme
         ctk.set_appearance_mode(self._settings.get("theme", "dark"))
         ctk.set_default_color_theme(str(BASE_DIR / "assets" / "nest_theme.json"))
@@ -1400,6 +1406,7 @@ class App(ctk.CTk):
 
         self._build_layout()
         self._poll_events()
+        self._animate()                # micro-animation tick (~60 fps)
         self._setup_tray()
         SplashScreen(self, self.deiconify)
 
@@ -2010,14 +2017,16 @@ class App(ctk.CTk):
                 elif evt.kind == EventKind.PROGRESS:
                     idx   = evt.index
                     total = self._total_files or 1
-                    self._prog_overall.set(idx / total)
+                    # set targets — _animate() will interpolate smoothly
+                    self._prog_target_overall = idx / total
+                    self._prog_target_current = (idx % 20) / 20
                     self._prog_label.configure(text=f"{idx} / {total}")
                     if evt.files_per_sec > 0:
                         self._speed_label.configure(
                             text=f"{evt.files_per_sec:.1f} files/s")
                     fname = Path(evt.src_path).name
                     self._current_label.configure(text=fname)
-                    self._prog_current.set((idx % 20) / 20)
+                    self._pulse_active = True
 
                     if evt.status in ("moved", "copied", "dry_run"):
                         if evt.media_type == "Videos":
@@ -2046,9 +2055,15 @@ class App(ctk.CTk):
 
                 elif evt.kind == EventKind.DONE:
                     s = evt.stats
-                    self._prog_overall.set(1.0)
-                    self._prog_current.set(1.0)
-                    self._current_label.configure(text="Done")
+                    self._prog_target_overall = 1.0
+                    self._prog_target_current = 1.0
+                    self._pulse_active = False
+                    err_count = s.get("errors", 0)
+                    icon = "✓" if not err_count else "⚠"
+                    self._current_label.configure(
+                        text=f"{icon}  Done",
+                        text_color=("#2A6A2A", "#7AB648") if not err_count
+                                   else ("#9A3010", "#E07050"))
                     elapsed = s.get("elapsed_sec", 0)
                     total   = s.get("total", 0)
                     speed   = f"{total/elapsed:.1f} files/s" if elapsed > 0 else ""
@@ -2078,6 +2093,47 @@ class App(ctk.CTk):
 
         self.after(80, self._poll_events)
 
+    # ── micro-animations (60 fps tick) ────────────────────────────────────────
+
+    def _animate(self):
+        """Smoothly interpolate progress bars toward their target values
+        and pulse the current-file label while a run is in progress.
+
+        Uses an ease-out curve (lerp at 18 % per frame) so motion feels
+        organic and never jumpy, regardless of how fast events arrive.
+        """
+        try:
+            # ── progress bars: ease toward target (lerp 18 % each frame) ──
+            cur_o = self._prog_overall.get()
+            cur_c = self._prog_current.get()
+            tgt_o = self._prog_target_overall
+            tgt_c = self._prog_target_current
+            if abs(tgt_o - cur_o) > 0.0005:
+                self._prog_overall.set(cur_o + (tgt_o - cur_o) * 0.18)
+            elif cur_o != tgt_o:
+                self._prog_overall.set(tgt_o)
+            if abs(tgt_c - cur_c) > 0.0005:
+                self._prog_current.set(cur_c + (tgt_c - cur_c) * 0.18)
+            elif cur_c != tgt_c:
+                self._prog_current.set(tgt_c)
+
+            # ── current-file label pulse glow while running ──
+            if self._pulse_active:
+                import math
+                self._pulse_phase = (self._pulse_phase + 0.12) % (2 * math.pi)
+                # 0..1 sine wave → blend amber gold for warm pulse
+                t = (math.sin(self._pulse_phase) + 1) * 0.5
+                # interpolate text colour between muted gray and amber
+                r = int(0x9A + (0xE0 - 0x9A) * t)
+                g = int(0x88 + (0xA0 - 0x88) * t)
+                b = int(0x70 + (0x30 - 0x70) * t)
+                self._current_label.configure(
+                    text_color=f"#{r:02X}{g:02X}{b:02X}")
+        except Exception:
+            pass
+
+        self.after(16, self._animate)   # ~60 fps
+
     # ── log helpers ───────────────────────────────────────────────────────────
 
     def _log(self, tag: str, msg: str):
@@ -2095,9 +2151,13 @@ class App(ctk.CTk):
         self._clear_log()
         self._prog_overall.set(0)
         self._prog_current.set(0)
+        self._prog_target_overall = 0.0
+        self._prog_target_current = 0.0
+        self._pulse_active = False
         self._prog_label.configure(text="0 / 0")
         self._speed_label.configure(text="")
-        self._current_label.configure(text="—")
+        self._current_label.configure(text="—",
+                                      text_color=("gray50", "gray60"))
         for v in self._stat_vars.values():
             v.set("—")
         self._cnt_photos = self._cnt_videos = self._cnt_dupes = 0
