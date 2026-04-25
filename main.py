@@ -1046,6 +1046,139 @@ class _ConfirmResetDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Visual Summary Report (shown after run completes) ────────────────────────
+
+class SummaryReportDialog(ctk.CTkToplevel):
+    """Friendly post-run summary — emoji-rich, single click to dismiss.
+
+    Uses the warm-nest palette plus a subtle entrance fade. Headline lines
+    are written in plain English (i18n in v2.0 will replace them).
+    """
+
+    def __init__(self, parent, stats: dict, op_word: str):
+        super().__init__(parent)
+        self.title("Run Summary")
+        self.geometry("520x460")
+        self.resizable(False, False)
+        _apply_icon(self)
+        self._build(stats, op_word)
+        self.grab_set()
+
+    def _build(self, stats: dict, op_word: str):
+        self.grid_columnconfigure(0, weight=1)
+
+        moved   = stats.get("moved", 0)
+        dupes   = stats.get("duplicates", 0)
+        errs    = stats.get("errors", 0)
+        skipped = stats.get("skipped", 0)
+        resumed = stats.get("resumed", 0)
+        total   = stats.get("total", 0)
+        elapsed = stats.get("elapsed_sec", 0) or 1
+        speed   = total / elapsed if elapsed > 0 else 0
+
+        # ── headline (color-coded by outcome) ──
+        if errs == 0 and total > 0:
+            head_text  = "🎉  Memories organized!"
+            head_color = ("#FFFFFF", "#F0D090")
+            head_bg    = ("#7AB648", "#2A6A2A")
+        elif total == 0:
+            head_text  = "🤔  No files found"
+            head_color = ("#FFFFFF", "#F0D090")
+            head_bg    = ("#9A8060", "#5A4530")
+        else:
+            head_text  = "⚠  Finished with issues"
+            head_color = ("#FFFFFF", "#FFD0C0")
+            head_bg    = ("#B83828", "#7A1818")
+
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=head_bg)
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text=head_text,
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=head_color
+                     ).pack(padx=24, pady=(18, 4), anchor="w")
+        ctk.CTkLabel(hdr,
+                     text=f"{op_word}  ·  {self._fmt_elapsed(elapsed)}  ·  "
+                          f"{speed:.1f} files/s",
+                     font=ctk.CTkFont(size=11),
+                     text_color=head_color
+                     ).pack(padx=24, pady=(0, 16), anchor="w")
+
+        # ── stats grid (2 columns × 3 rows) ──
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=24, pady=(20, 12))
+        body.grid_columnconfigure((0, 1), weight=1)
+
+        rows = [
+            ("📁", "Files processed",    f"{moved:,}",          "#7AB648"),
+            ("📦", "Total scanned",      f"{total:,}",          "#C8882A"),
+            ("🗂", "Duplicates found",   f"{dupes:,}",          "#D4A030"),
+            ("⏩", "Resumed (skipped)",  f"{resumed:,}",        "#9A8060"),
+            ("⚠", "Errors",             f"{errs:,}",           "#D45030"),
+            ("💤", "Skipped (unknown)",  f"{skipped:,}",        "#7A6850"),
+        ]
+        for i, (icon, label, value, accent) in enumerate(rows):
+            r, c = divmod(i, 2)
+            self._stat_card(body, r, c, icon, label, value, accent)
+
+        # ── friendly closing line ──
+        if total > 0 and errs == 0:
+            tag = self._pick_friendly_tag(moved, dupes)
+            ctk.CTkLabel(self, text=tag,
+                         font=ctk.CTkFont(size=11),
+                         text_color=("#7A4A10", "#C8A060")
+                         ).grid(row=2, column=0, padx=24, pady=(0, 8), sticky="w")
+
+        # ── close button ──
+        bb = ctk.CTkFrame(self, fg_color="transparent")
+        bb.grid(row=3, column=0, padx=24, pady=(4, 18), sticky="e")
+        ctk.CTkButton(bb, text="✓  Got it", width=120,
+                      command=self.destroy
+                      ).pack()
+
+    def _stat_card(self, parent, r, c, icon, label, value, accent):
+        f = ctk.CTkFrame(parent, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+        f.grid(row=r, column=c, padx=4, pady=4, sticky="ew", ipady=4)
+        # accent strip
+        ctk.CTkFrame(f, height=3, corner_radius=2, fg_color=accent
+                     ).pack(fill="x", padx=6, pady=(4, 0))
+        row = ctk.CTkFrame(f, fg_color="transparent")
+        row.pack(fill="x", padx=10, pady=(4, 8))
+        ctk.CTkLabel(row, text=icon, font=ctk.CTkFont(size=16)
+                     ).pack(side="left")
+        col = ctk.CTkFrame(row, fg_color="transparent")
+        col.pack(side="left", padx=(8, 0), fill="x", expand=True)
+        ctk.CTkLabel(col, text=value,
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=("#5A3A10", "#F0D090"), anchor="w"
+                     ).pack(anchor="w")
+        ctk.CTkLabel(col, text=label,
+                     font=ctk.CTkFont(size=10),
+                     text_color=("#8A7055", "#9A8060"), anchor="w"
+                     ).pack(anchor="w")
+
+    @staticmethod
+    def _fmt_elapsed(sec: float) -> str:
+        if sec < 60:
+            return f"{sec:.0f}s"
+        if sec < 3600:
+            return f"{int(sec // 60)}m {int(sec % 60)}s"
+        h = int(sec // 3600)
+        m = int((sec % 3600) // 60)
+        return f"{h}h {m}m"
+
+    @staticmethod
+    def _pick_friendly_tag(moved: int, dupes: int) -> str:
+        if dupes >= moved and dupes > 0:
+            return f"🪺  Caught {dupes:,} duplicates — your destination stayed tidy."
+        if moved >= 10_000:
+            return "🪺  A small archive made huge — well done."
+        if moved >= 1_000:
+            return "🪺  A meaningful batch organized in one go."
+        if moved > 0:
+            return "🪺  Every memory has its place now."
+        return "🪺  Nothing new this time."
+
+
 # ── Settings dialog ───────────────────────────────────────────────────────────
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -1408,6 +1541,7 @@ class App(ctk.CTk):
         self._poll_events()
         self._animate()                # micro-animation tick (~60 fps)
         self._setup_tray()
+        self._bind_shortcuts()
         SplashScreen(self, self.deiconify)
 
     # ── sound helpers ─────────────────────────────────────────────────────────
@@ -1882,6 +2016,27 @@ class App(ctk.CTk):
         SettingsDialog(self, self._settings, self._sound,
                        on_save=self._apply_new_settings)
 
+    # ── keyboard shortcuts ────────────────────────────────────────────────────
+
+    def _bind_shortcuts(self):
+        """Global accelerators. F1/F2/F3 are non-modifier so they don't
+        clash with text-entry shortcuts; Ctrl+R/Esc are conventional."""
+        self.bind("<Control-r>",      lambda _e: self._safe_start())
+        self.bind("<Control-R>",      lambda _e: self._safe_start())
+        self.bind("<Escape>",         lambda _e: self._safe_stop())
+        self.bind("<F1>",             lambda _e: self._open_device_manager())
+        self.bind("<F2>",             lambda _e: self._open_folder_structure())
+        self.bind("<F3>",             lambda _e: self._open_category_manager())
+        self.bind("<Control-comma>",  lambda _e: self._open_settings())
+
+    def _safe_start(self):
+        if self._btn_start.cget("state") == "normal":
+            self._start()
+
+    def _safe_stop(self):
+        if self._btn_stop.cget("state") == "normal":
+            self._stop()
+
     def _apply_new_settings(self, new_settings: dict):
         old_theme = self._settings.get("theme")
         self._settings = new_settings
@@ -2087,6 +2242,12 @@ class App(ctk.CTk):
                     if self._organizer:
                         self._auto_save_unresolved(
                             self._organizer._resolver.unresolved_devices)
+
+                    # visual summary report (only for real runs that processed files)
+                    if s.get("total", 0) > 0 and not self._dry_run_var.get():
+                        op_word = "Copied" if self._op_var.get() == "copy" else "Moved"
+                        self.after(300, lambda st=s, op=op_word:
+                                   SummaryReportDialog(self, st, op))
 
         except queue.Empty:
             pass
