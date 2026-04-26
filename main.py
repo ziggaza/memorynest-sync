@@ -2564,9 +2564,18 @@ class App(ctk.CTk):
         left.grid_columnconfigure(0, weight=1)
 
         # Source folders
-        ctk.CTkLabel(left, text="Source Folders",
+        # Source Folders header — title on left, live count on right
+        src_hdr = ctk.CTkFrame(left, fg_color="transparent")
+        src_hdr.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="ew")
+        src_hdr.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(src_hdr, text="Source Folders",
                      font=ctk.CTkFont(size=13, weight="bold")
-                     ).grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
+                     ).grid(row=0, column=0, sticky="w")
+        # live media-file count (updated async after add/remove)
+        self._src_count_lbl = ctk.CTkLabel(src_hdr, text="",
+                                           font=ctk.CTkFont(size=10),
+                                           text_color=("#7A4A10", "#C8A060"))
+        self._src_count_lbl.grid(row=0, column=1, sticky="e")
 
         src_frame = ctk.CTkFrame(left, fg_color="transparent")
         src_frame.grid(row=1, column=0, padx=12, sticky="ew")
@@ -2825,6 +2834,9 @@ class App(ctk.CTk):
                            ("event","#F0C040")]:   # Memory Mapper matches → bright gold
             self._log_text.tag_configure(tag, foreground=color)
 
+        # Right-click context menu (v1.3)
+        self._log_text.bind("<Button-3>", self._on_log_right_click)
+
         # Progress bars
         prog = ctk.CTkFrame(right, fg_color="transparent")
         prog.grid(row=2, column=0, padx=12, pady=(4, 12), sticky="ew")
@@ -2860,6 +2872,7 @@ class App(ctk.CTk):
             if str(p) not in self._src_listbox.get(0, "end"):
                 self._src_listbox.insert("end", str(p))
                 self._source_paths.append(p)
+                self._refresh_source_count()
 
     def _remove_source(self):
         sel = self._src_listbox.curselection()
@@ -2867,6 +2880,52 @@ class App(ctk.CTk):
             idx = sel[0]
             self._src_listbox.delete(idx)
             self._source_paths.pop(idx)
+            self._refresh_source_count()
+
+    # ── source-count preview (v1.3) ───────────────────────────────────────────
+
+    def _refresh_source_count(self):
+        """Async-count media files across the current source list.
+
+        Uses a generation token so a slow scan from an earlier source set
+        can't overwrite a newer count if the user has already changed the
+        list again.
+        """
+        if not self._source_paths:
+            self._src_count_lbl.configure(text="")
+            return
+        # bump generation; only the latest scan's result is honoured
+        self._src_count_gen = getattr(self, "_src_count_gen", 0) + 1
+        gen = self._src_count_gen
+        self._src_count_lbl.configure(text="counting…",
+                                      text_color=("gray45", "gray60"))
+
+        sources = list(self._source_paths)
+        config  = self._config
+        dest    = (Path(self._dest_var.get())
+                   if self._dest_var.get() else None)
+
+        def _count_worker():
+            from core.scanner import scan
+            try:
+                n = sum(1 for _ in scan(sources, config, dest))
+            except Exception:
+                n = -1
+            # marshal back to UI thread
+            self.after(0, lambda: self._on_count_done(gen, n))
+
+        threading.Thread(target=_count_worker, daemon=True).start()
+
+    def _on_count_done(self, gen: int, n: int):
+        if gen != getattr(self, "_src_count_gen", 0):
+            return   # stale result — ignore
+        if n < 0:
+            self._src_count_lbl.configure(
+                text="(error)", text_color="#D45030")
+        else:
+            self._src_count_lbl.configure(
+                text=f"≈ {n:,} media files",
+                text_color=("#7A4A10", "#C8A060"))
 
     def _browse_dest(self):
         path = filedialog.askdirectory(title="Select Destination Folder")
@@ -3202,6 +3261,95 @@ class App(ctk.CTk):
         self._log_text.configure(state="normal")
         self._log_text.delete("1.0", "end")
         self._log_text.configure(state="disabled")
+
+    # ── log context menu (v1.3) ───────────────────────────────────────────────
+
+    def _on_log_right_click(self, event):
+        """Pop up a small context menu over the right-clicked log line.
+
+        Offers:  Copy line · Reveal in Explorer · Open destination folder
+        The "Reveal" option is only enabled when the log line contains a
+        " => <path>" segment we can resolve.
+        """
+        idx = self._log_text.index(f"@{event.x},{event.y}")
+        line = self._log_text.get(f"{idx} linestart", f"{idx} lineend")
+
+        # try to extract the destination path from the line
+        target_path = self._parse_log_dest(line)
+
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Copy line",
+                         command=lambda: self._copy_text(line))
+        if target_path is not None:
+            menu.add_command(label="Reveal in Explorer",
+                             command=lambda p=target_path: self._open_in_explorer(p, reveal=True))
+        if self._dest_var.get():
+            menu.add_command(label="Open destination folder",
+                             command=lambda: self._open_in_explorer(
+                                 Path(self._dest_var.get()), reveal=False))
+
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _parse_log_dest(self, line: str) -> Path | None:
+        """Best-effort parse of '... => <rel-path>  (device)' to a real Path.
+
+        Log lines truncate the path to last 4 components for readability;
+        we re-attach to the destination root and walk back if missing.
+        """
+        if " => " not in line:
+            return None
+        dest_root = self._dest_var.get().strip()
+        if not dest_root:
+            return None
+        # everything after " => " up to the device "(...)" tag at the end
+        rhs = line.split(" => ", 1)[1]
+        rel = rhs.split("  (", 1)[0].strip()
+        # remove an optional trailing "[event …]" tag
+        if "  [" in rel:
+            rel = rel.split("  [", 1)[0].strip()
+        if not rel:
+            return None
+        # try the obvious first: dest_root + rel (works when full path was preserved)
+        candidate = Path(dest_root) / rel
+        if candidate.exists():
+            return candidate
+        # otherwise return its parent if the parent exists (folder reveal)
+        if candidate.parent.exists():
+            return candidate.parent
+        return None
+
+    @staticmethod
+    def _copy_text(text: str):
+        try:
+            import pyperclip
+            pyperclip.copy(text.rstrip("\n"))
+        except Exception:
+            # Fallback: use tk clipboard (works without third-party libs)
+            try:
+                root = tk._default_root
+                if root is not None:
+                    root.clipboard_clear()
+                    root.clipboard_append(text.rstrip("\n"))
+            except Exception:
+                pass
+
+    @staticmethod
+    def _open_in_explorer(path: Path, *, reveal: bool):
+        """Open Windows Explorer at *path*. If reveal=True and path is a
+        file, the file is selected; if it's a directory, just open it."""
+        import subprocess
+        try:
+            p = path.resolve()
+            if reveal and p.is_file():
+                subprocess.Popen(["explorer", "/select,", str(p)])
+            else:
+                target = p if p.is_dir() else p.parent
+                subprocess.Popen(["explorer", str(target)])
+        except Exception:
+            pass
 
     def _reset_ui(self):
         self._clear_log()
