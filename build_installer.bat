@@ -64,6 +64,18 @@ if exist "dist" (
     rmdir /s /q "dist"
 )
 
+REM -- Regenerate config.default.json from canonical baseline ------------------
+REM Every build starts from a programmatically-generated factory state — no
+REM developer test data, auto-detected pollution, or local edits can leak
+REM into the shipped installer.
+echo Regenerating clean config.default.json ...
+python _build_helper.py clean-config
+if errorlevel 1 (
+    echo [ERROR] Could not write clean config.default.json
+    pause
+    exit /b 1
+)
+
 echo.
 echo Building executable for v%APP_VERSION% ...
 echo.
