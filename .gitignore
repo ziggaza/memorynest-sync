@@ -26,6 +26,10 @@ logs/
 # ── Runtime / user data ───────────────────────────────────────────────────────
 settings.json
 .organizer/
+# Per-user runtime config (live data); the factory defaults committed to
+# git are in config.default.json. Each install copies that to the user
+# data dir as config.json on first run.
+config.json
 # Sound cache — regenerated on first launch from numpy synth
 sounds/
 assets/sounds/
