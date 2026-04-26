@@ -18,7 +18,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.3.0"
+APP_VERSION  = "1.3.1"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
@@ -999,6 +999,25 @@ class MemoryMapperDialog(ctk.CTkToplevel):
             self._render_editor()
             self._render_editor_bottom()
 
+        # Reset scroll to top after every mode-switch so users always see
+        # the start of the new content (fixes scroll-position drift bug
+        # where editor's scrolled-down state carried into list view).
+        self._scroll_to_top()
+
+    def _scroll_to_top(self):
+        """Scroll the body's CTkScrollableFrame back to the top.
+
+        Internal canvas reset must happen *after* idle layout completes,
+        otherwise the scroll region isn't recomputed yet and yview_moveto
+        is a no-op.
+        """
+        try:
+            canvas = self._body._parent_canvas
+            self.update_idletasks()
+            canvas.yview_moveto(0.0)
+        except Exception:
+            pass
+
     # ── LIST MODE ─────────────────────────────────────────────────────────────
 
     def _render_list(self):
@@ -1126,14 +1145,19 @@ class MemoryMapperDialog(ctk.CTkToplevel):
 
     def _begin_create(self):
         from core.event_rules import EventRule
-        from datetime import datetime, timedelta
+        from datetime import datetime
+        # Default new-event range: today 00:00 → today 23:45 (single-day).
+        # User can extend the end date later; defaulting both to the same
+        # day matches the most common case (single-day events) and avoids
+        # an awkward two-step "I have to fix the end too" interaction.
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        end_today = today.replace(hour=23, minute=45)
         self._editing_idx = None
         self._editing_rule = EventRule(
-            name="New Event",
+            name="",                # blank — encourages user to type
             start=today,
-            end=today + timedelta(days=1, hours=23, minutes=45),
-            folder_name="New Event",
+            end=end_today,
+            folder_name="",         # blank — auto-filled from name+date
             priority=10,
         )
         self._mode = "edit"
@@ -1177,20 +1201,31 @@ class MemoryMapperDialog(ctk.CTkToplevel):
     def _render_editor(self):
         """Inline event-editing form (replaces EventEditorDialog).
 
-        Uses the same field-set as the old dialog but renders into self._body
-        so users stay inside one window.
+        Smart helpers:
+        - Event-name + Date drives a live folder-name suggestion until
+          the user manually edits the folder name (`_ed_folder_dirty`).
+        - When the start date changes and the end is still on/before
+          start, end auto-syncs to the same day at 23:45.
+        - Folder-name preset chips below the entry generate common
+          patterns (Event Name / Date - Event / Date range - Event).
         """
         rule = self._editing_rule
         body = self._body
 
-        # ── name ──
-        ctk.CTkLabel(body, text="Display name",
+        # State flags for smart auto-fill behaviour
+        self._ed_folder_dirty = bool(rule.folder_name)  # user-typed already?
+        self._ed_end_dirty    = False                   # end manually adjusted?
+
+        # ── event name ──
+        ctk.CTkLabel(body, text="Event name",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      ).pack(padx=20, pady=(14, 2), anchor="w")
         self._ed_name = tk.StringVar(value=rule.name)
         ctk.CTkEntry(body, textvariable=self._ed_name,
                      placeholder_text="e.g. HBD Party OOM 2025"
                      ).pack(padx=20, pady=(0, 4), fill="x")
+        # Trace name changes to auto-fill folder name
+        self._ed_name.trace_add("write", lambda *_: self._auto_fill_folder())
 
         # ── date range ──
         date_hdr = ctk.CTkFrame(body, fg_color="transparent")
@@ -1219,7 +1254,7 @@ class MemoryMapperDialog(ctk.CTkToplevel):
                      ).pack(padx=24, pady=(4, 2), anchor="w")
         self._ed_end = DateTimePicker(body, initial=rule.end,
                                       end_of_day=True,
-                                      on_change=self._on_ed_date_change)
+                                      on_change=self._on_ed_end_picker_change)
         self._ed_end.pack(padx=24, pady=(0, 4), anchor="w")
 
         self._ed_warn = ctk.CTkLabel(body, text="",
@@ -1238,13 +1273,37 @@ class MemoryMapperDialog(ctk.CTkToplevel):
                      ).pack(padx=20, pady=(14, 2), anchor="w")
         self._ed_folder = tk.StringVar(value=rule.folder_name)
         ctk.CTkEntry(body, textvariable=self._ed_folder,
-                     placeholder_text="e.g. HBD PARTY OOM 2025"
+                     placeholder_text="auto — fills from event name + dates"
                      ).pack(padx=20, pady=(0, 2), fill="x")
+        # Mark the folder dirty when *the user* edits it. The auto-fill
+        # path also writes via .set() but uses _ed_folder_dirty=False
+        # before doing so, so we check that flag.
+        self._ed_folder.trace_add("write", lambda *_: self._on_folder_changed())
+
+        # Preset chips — clicking applies the template using current name + dates
+        preset_row = ctk.CTkFrame(body, fg_color="transparent")
+        preset_row.pack(padx=20, pady=(2, 2), anchor="w", fill="x")
+        ctk.CTkLabel(preset_row, text="Quick presets:",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray50", "gray55"),
+                     ).pack(side="left", padx=(0, 6))
+        for label, key in (
+            ("Event name only",        "name"),
+            ("YYYY-MM-DD · Event",     "date_name"),
+            ("YYYY-MM-DD–MM-DD · Event", "range_name"),
+            ("YYYYMMDD-YYYYMMDD Event", "compact_range"),
+        ):
+            ctk.CTkButton(preset_row, text=label, height=22,
+                          fg_color=("#7A5535", "#3D3020"),
+                          hover_color=("#9A7050", "#4D4028"),
+                          font=ctk.CTkFont(size=10),
+                          command=lambda k=key: self._apply_folder_preset(k),
+                          ).pack(side="left", padx=(0, 4))
+
         self._ed_preview = ctk.CTkLabel(body, text="",
                                         font=ctk.CTkFont(size=10),
                                         text_color=("gray45", "gray55"))
-        self._ed_preview.pack(padx=20, pady=(0, 4), anchor="w")
-        self._ed_folder.trace_add("write", lambda *_: self._update_ed_preview())
+        self._ed_preview.pack(padx=20, pady=(4, 4), anchor="w")
         self._update_ed_preview()
 
         # ── filters: devices ──
@@ -1327,9 +1386,15 @@ class MemoryMapperDialog(ctk.CTkToplevel):
     # ── editor helpers ────────────────────────────────────────────────────────
 
     def _update_ed_preview(self):
-        folder = self._ed_folder.get().strip() or "(name)"
+        folder = self._ed_folder.get().strip() or "(folder name)"
         self._ed_preview.configure(
             text=f"Files will save to:  Events / {folder} /")
+
+    def _on_ed_end_picker_change(self):
+        """Called when user touches the end picker — flips the dirty flag
+        so auto-sync stops nudging it."""
+        self._ed_end_dirty = True
+        self._on_ed_date_change()
 
     def _on_ed_date_change(self):
         try:
@@ -1337,6 +1402,19 @@ class MemoryMapperDialog(ctk.CTkToplevel):
             end   = self._ed_end.get_value()
         except Exception:
             return
+
+        # Auto-sync: if the user hasn't manually adjusted the end date and
+        # the current end is on/before the start, snap end to the same
+        # calendar day as start (preserving its existing time).
+        if not getattr(self, "_ed_end_dirty", False) and end <= start:
+            same_day_end = start.replace(hour=23, minute=45, second=59)
+            # set_value triggers picker callbacks too — temporarily mark
+            # dirty False so this programmatic change isn't treated as
+            # a user edit.
+            self._ed_end.set_value(same_day_end)
+            self._ed_end_dirty = False
+            end = same_day_end
+
         if end < start:
             self._ed_warn.configure(
                 text="⚠  End date is earlier than start — please adjust.")
@@ -1345,6 +1423,83 @@ class MemoryMapperDialog(ctk.CTkToplevel):
             self._ed_warn.configure(text="")
             self._ed_info.configure(
                 text=f"✓  Window length: {_fmt_event_span(start, end)}")
+
+        # Re-run folder auto-fill so the date portion of the suggestion
+        # follows the new range.
+        self._auto_fill_folder()
+
+    # ── smart auto-fill helpers (v1.3.1) ──────────────────────────────────────
+
+    def _on_folder_changed(self):
+        """Called whenever _ed_folder changes — distinguishes user edits
+        from programmatic auto-fills via the _ed_folder_dirty flag."""
+        # Mark dirty unless the caller explicitly cleared the flag for
+        # programmatic updates (auto-fill / preset application).
+        if not getattr(self, "_ed_folder_suppress", False):
+            self._ed_folder_dirty = True
+        self._update_ed_preview()
+
+    def _auto_fill_folder(self):
+        """Suggest a folder name from current event name + dates.
+
+        Uses the YYYYMMDD start date as a sortable prefix:
+            "20250617 HBD Party OOM 2025"
+        Skips if the user has typed in the folder field manually.
+        """
+        if getattr(self, "_ed_folder_dirty", False):
+            return
+        name = self._ed_name.get().strip()
+        if not name:
+            self._set_folder_quietly("")
+            return
+        try:
+            start = self._ed_start.get_value()
+            suggestion = f"{start.strftime('%Y%m%d')} {name}"
+        except Exception:
+            suggestion = name
+        self._set_folder_quietly(suggestion)
+
+    def _apply_folder_preset(self, key: str):
+        """Generate folder name from current event-name + date range."""
+        name = self._ed_name.get().strip() or "Event"
+        try:
+            start = self._ed_start.get_value()
+            end   = self._ed_end.get_value()
+        except Exception:
+            return
+        if key == "name":
+            text = name
+        elif key == "date_name":
+            text = f"{start.strftime('%Y-%m-%d')} {name}"
+        elif key == "range_name":
+            if start.date() == end.date():
+                text = f"{start.strftime('%Y-%m-%d')} {name}"
+            elif start.year == end.year and start.month == end.month:
+                text = (f"{start.strftime('%Y-%m-%d')}"
+                        f"–{end.strftime('%d')} {name}")
+            else:
+                text = (f"{start.strftime('%Y-%m-%d')}"
+                        f"–{end.strftime('%Y-%m-%d')} {name}")
+        elif key == "compact_range":
+            if start.date() == end.date():
+                text = f"{start.strftime('%Y%m%d')} {name}"
+            else:
+                text = (f"{start.strftime('%Y%m%d')}"
+                        f"-{end.strftime('%Y%m%d')} {name}")
+        else:
+            text = name
+        # User picked a preset → still treat as "user choice" so subsequent
+        # name edits don't overwrite it.
+        self._set_folder_quietly(text)
+        self._ed_folder_dirty = True
+
+    def _set_folder_quietly(self, value: str):
+        """Update the folder var without flipping the dirty flag."""
+        self._ed_folder_suppress = True
+        try:
+            self._ed_folder.set(value)
+        finally:
+            self._ed_folder_suppress = False
 
     def _cancel_edit(self):
         # Discard any in-progress changes and return to list view.
@@ -2956,7 +3111,15 @@ class App(ctk.CTk):
         try:
             from PIL import Image as _PILImage
             _img = _PILImage.open(BASE_DIR / "assets" / "ziggaza_logo.png")
-            _w = 270
+            # Centre-crop any padding around the artwork so the logo reads
+            # tighter at smaller sizes. Trim ~12% from each edge.
+            _iw, _ih = _img.width, _img.height
+            _trim_x = int(_iw * 0.12)
+            _trim_y = int(_ih * 0.12)
+            _img = _img.crop((_trim_x, _trim_y, _iw - _trim_x, _ih - _trim_y))
+
+            # Smaller display footprint than v1.3 (270 → 170 px wide)
+            _w = 170
             _h = int(_w * _img.height / _img.width)
             _ctk_img = ctk.CTkImage(light_image=_img, dark_image=_img, size=(_w, _h))
             ctk.CTkLabel(logo_frame, image=_ctk_img, text="",
@@ -3059,9 +3222,16 @@ class App(ctk.CTk):
         sb.grid(row=1, column=1, sticky="ns")
         self._log_text.configure(yscrollcommand=sb.set)
 
-        for tag, color in [("ok","#7AB648"),("dupe","#C8882A"),
-                           ("error","#D45030"),("info","#9A8870"),("head","#E0A030"),
-                           ("event","#F0C040")]:   # Memory Mapper matches → bright gold
+        # 6 distinct, theme-cohesive log colours — readable on both
+        # the dark (#1E1710) and light (#EDE5D5) log backgrounds.
+        for tag, color in [
+            ("ok",    "#7AB648"),   # green  — successful move/copy
+            ("event", "#F0C040"),   # bright gold — Memory Mapper match
+            ("head",  "#E0A030"),   # warm gold — scan / done summary
+            ("dupe",  "#C87B8A"),   # dusty rose — duplicate quarantined
+            ("error", "#D45030"),   # red — error
+            ("info",  "#9A8870"),   # warm gray — info
+        ]:
             self._log_text.tag_configure(tag, foreground=color)
 
         # Right-click context menu (v1.3)
