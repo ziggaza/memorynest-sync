@@ -16,6 +16,7 @@ ENV/
 # ── PyInstaller build artifacts ───────────────────────────────────────────────
 build/
 dist/
+*.spec
 *.spec.bak
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
@@ -25,6 +26,9 @@ logs/
 # ── Runtime / user data ───────────────────────────────────────────────────────
 settings.json
 .organizer/
+# Sound cache — regenerated on first launch from numpy synth
+sounds/
+assets/sounds/
 
 # ── IDE / Editor ──────────────────────────────────────────────────────────────
 .vscode/

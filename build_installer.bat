@@ -1,33 +1,71 @@
 @echo off
+setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
-echo ================================================
-echo  MemoryNest Sync - Build Standalone Installer
-echo ================================================
+echo.
+echo ====================================================
+echo   MemoryNest Sync - Build Standalone Installer
+echo ====================================================
 echo.
 
-:: ── Read APP_VERSION from main.py ─────────────────────────────────────────────
-for /f "delims=" %%v in ('python -c "import re; print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', open('main.py', encoding='utf-8').read()).group(1))"') do set APP_VERSION=%%v
+REM -- Sanity check: Python on PATH --
+where python >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] python is not on PATH.
+    echo         Install Python and ensure it is added to PATH, then retry.
+    pause
+    exit /b 1
+)
+
+REM -- Sanity check: required source files --
+if not exist "main.py" (
+    echo [ERROR] main.py not found in %CD%.
+    echo         Run this batch from the project root.
+    pause
+    exit /b 1
+)
+if not exist "_build_helper.py" (
+    echo [ERROR] _build_helper.py not found.
+    echo         It should sit alongside build_installer.bat.
+    pause
+    exit /b 1
+)
+
+REM -- Read APP_VERSION via the helper script --
+echo Detecting APP_VERSION from main.py ...
+for /f "usebackq tokens=*" %%v in (`python _build_helper.py version`) do set "APP_VERSION=%%v"
 if "%APP_VERSION%"=="" (
-    echo Could not detect APP_VERSION from main.py. Aborting.
+    echo [ERROR] Could not read APP_VERSION. Helper output was empty.
     pause
     exit /b 1
 )
 echo Detected APP_VERSION = %APP_VERSION%
 echo.
 
-:: ── Check PyInstaller ─────────────────────────────────────────────────────────
+REM -- Ensure PyInstaller is available --
 python -c "import PyInstaller" 2>nul
-if %errorlevel% neq 0 (
-    echo Installing PyInstaller...
+if errorlevel 1 (
+    echo PyInstaller not found. Installing ...
     pip install pyinstaller
+    if errorlevel 1 (
+        echo [ERROR] PyInstaller install failed.
+        pause
+        exit /b 1
+    )
 )
 
-:: ── Clean previous build (avoid stale state) ─────────────────────────────────
-if exist "build" rmdir /s /q "build"
-if exist "dist"  rmdir /s /q "dist"
+REM -- Clean previous build outputs to avoid stale state --
+if exist "build" (
+    echo Cleaning previous build/ ...
+    rmdir /s /q "build"
+)
+if exist "dist" (
+    echo Cleaning previous dist/ ...
+    rmdir /s /q "dist"
+)
 
-echo Building executable for v%APP_VERSION%...
+echo.
+echo Building executable for v%APP_VERSION% ...
 echo.
 
 pyinstaller ^
@@ -50,34 +88,33 @@ pyinstaller ^
     --collect-all "pystray" ^
     main.py
 
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
-    echo Build FAILED. Check errors above.
+    echo [ERROR] PyInstaller build failed. Check messages above.
     pause
     exit /b 1
 )
 
-:: ── Update installer.iss with the current version ────────────────────────────
-:: Rewrites AppVersion + OutputBaseFilename so each release produces a uniquely-
-:: named .exe in installer_output/, no manual edits required.
+REM -- Sync installer.iss with the detected version --
 echo.
-echo Updating installer.iss with version %APP_VERSION%...
-python -c "import re; t=open('installer.iss',encoding='utf-8').read(); t=re.sub(r'^AppVersion=.*$', 'AppVersion=%APP_VERSION%', t, flags=re.M); t=re.sub(r'^OutputBaseFilename=.*$', 'OutputBaseFilename=MemoryNestSync_Setup_v%APP_VERSION%', t, flags=re.M); open('installer.iss','w',encoding='utf-8').write(t)"
-if %errorlevel% neq 0 (
-    echo Warning: Could not update installer.iss automatically.
-    echo You can still compile manually with the existing version.
+echo Updating installer.iss to v%APP_VERSION% ...
+python _build_helper.py update-iss %APP_VERSION%
+if errorlevel 1 (
+    echo [WARN] Could not auto-update installer.iss. Edit AppVersion manually.
 )
 
 echo.
-echo ================================================
-echo  Build SUCCESS!  v%APP_VERSION%
-echo ================================================
+echo ====================================================
+echo  Build SUCCESS  -  v%APP_VERSION%
+echo ====================================================
 echo.
-echo  PyInstaller output:   dist\MemoryNest Sync\
-echo  Installer template:   installer.iss   (updated to v%APP_VERSION%)
+echo  PyInstaller output : dist\MemoryNest Sync\
+echo  Installer template : installer.iss   (synced to v%APP_VERSION%)
 echo.
-echo  Next step: open installer.iss in Inno Setup Compiler and click Compile.
-echo  Output:    installer_output\MemoryNestSync_Setup_v%APP_VERSION%.exe
+echo  Next step : open installer.iss in Inno Setup Compiler
+echo               and click Compile.
+echo  Output    : installer_output\MemoryNestSync_Setup_v%APP_VERSION%.exe
 echo.
 
 pause
+endlocal
