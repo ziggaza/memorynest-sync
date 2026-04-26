@@ -50,6 +50,7 @@ class OrganizerEvent:
     device: str = ""
     date_source: str = ""
     media_type: str = ""     # "PHOTO" | "VIDEO" — for accurate GUI counting
+    event_name: str = ""     # name of matched Memory Mapper event (or "")
     error_msg: str = ""
     files_per_sec: float = 0.0
     stats: dict = field(default_factory=dict)
@@ -279,12 +280,13 @@ class Organizer:
                 self._emit(evt)
                 return
 
-            # build destination
-            dest = self._builder.build(
+            # build destination (and capture matched Memory Mapper event, if any)
+            dest, event_name = self._builder.build(
                 self._dest_root, fm.media_type, fm.device, fm.date, src.name
             )
             dest = self._builder.resolve_conflict(dest)
-            evt.dest_path = str(dest)
+            evt.dest_path  = str(dest)
+            evt.event_name = event_name or ""
 
             if self._dry_run:
                 evt.status = "dry_run"
