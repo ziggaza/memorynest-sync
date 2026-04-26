@@ -737,28 +737,45 @@ class DateTimePicker(ctk.CTkFrame):
         hours = [f"{h:02d}" for h in range(24)]
         mins  = ["00", "15", "30", "45"]
 
-        # row layout:  [Year ▾]  [Month ▾]  [Day ▾]    [Hour ▾] : [Min ▾]
-        kwargs = dict(font=ctk.CTkFont(size=11),
-                      command=lambda _v: self._handle_change())
+        # row layout:  [Year ▾]  [Month ▾]  [Day ▾]   |  [Hour ▾] : [Min ▾]   (optional)
+        # Date dropdowns use the prominent amber colour;
+        # time dropdowns are intentionally muted to read as "optional —
+        # leave alone for full-day coverage".
+        date_kw = dict(
+            font=ctk.CTkFont(size=11),
+            command=lambda _v: self._handle_change(),
+        )
+        time_kw = dict(
+            font=ctk.CTkFont(size=11),
+            fg_color=("#B0987A", "#3D3020"),
+            button_color=("#9A7050", "#4D4028"),
+            button_hover_color=("#7A5535", "#5D5038"),
+            text_color=("#FFFFFF", "#D0C0A8"),
+            command=lambda _v: self._handle_change(),
+        )
 
         self._opt_year  = ctk.CTkOptionMenu(self, variable=self._year,
-                                            values=years, width=80, **kwargs)
+                                            values=years, width=80, **date_kw)
         self._opt_month = ctk.CTkOptionMenu(self, variable=self._month,
-                                            values=_MONTH_ABBR, width=80, **kwargs)
+                                            values=_MONTH_ABBR, width=80, **date_kw)
         self._opt_day   = ctk.CTkOptionMenu(self, variable=self._day,
                                             values=self._days_for(initial.year, initial.month),
-                                            width=68, **kwargs)
+                                            width=68, **date_kw)
         self._opt_hour  = ctk.CTkOptionMenu(self, variable=self._hour,
-                                            values=hours, width=68, **kwargs)
+                                            values=hours, width=68, **time_kw)
         self._opt_min   = ctk.CTkOptionMenu(self, variable=self._minute,
-                                            values=mins,  width=68, **kwargs)
+                                            values=mins,  width=68, **time_kw)
 
         self._opt_year .grid(row=0, column=0, padx=(0, 4))
         self._opt_month.grid(row=0, column=1, padx=4)
         self._opt_day  .grid(row=0, column=2, padx=4)
-        ctk.CTkLabel(self, text="  ", width=8).grid(row=0, column=3)
+        # vertical separator hints "date | time"
+        ctk.CTkFrame(self, width=1, height=22,
+                     fg_color=("gray70", "#5A4830")
+                     ).grid(row=0, column=3, padx=10)
         self._opt_hour .grid(row=0, column=4, padx=(0, 2))
-        ctk.CTkLabel(self, text=":", font=ctk.CTkFont(size=14, weight="bold")
+        ctk.CTkLabel(self, text=":", font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=("gray45", "#9A8060"),
                      ).grid(row=0, column=5)
         self._opt_min  .grid(row=0, column=6, padx=(2, 0))
 
@@ -826,83 +843,104 @@ def _last_day(year: int, month: int) -> int:
 # ── Memory Mapper (event-based folders) ──────────────────────────────────────
 
 class MemoryMapperDialog(ctk.CTkToplevel):
-    """List view of all event rules — add / edit / toggle / delete."""
+    """Single window with two views: the rule list and an inline editor.
+
+    Modes:
+        "list"   — scrollable cards of all rules + Create button
+        "edit"   — inline form for one rule (replaces the list view)
+
+    The window header and bottom action bar both adapt to the current mode,
+    so users never see a third nested popup. Only `messagebox.askyesno` is
+    used for delete confirmation (a yes/no question, not a separate editor).
+    """
 
     def __init__(self, parent, config: dict, on_save):
         super().__init__(parent)
         self.title("Memory Mapper")
-        self.geometry("680x620")
+        self.geometry("680x680")
         self.resizable(True, True)
-        self.minsize(560, 480)
+        self.minsize(580, 540)
         _apply_icon(self)
         self._config  = config
         self._on_save = on_save
         # Work on a copy so Cancel really cancels
         from core.event_rules import load_rules
         self._rules   = load_rules(config)
-        self._build()
+
+        # Inline-editor state
+        self._mode: str = "list"             # "list" | "edit"
+        self._editing_idx: int | None = None  # None → creating a new rule
+        self._editing_buf: dict | None = None # editor field-vars container
+
+        self._build_chrome()
+        self._render()
         _center_on_parent(self, parent)
         self.grab_set()
 
-    # ── build ─────────────────────────────────────────────────────────────────
+    # ── chrome (header + bottom bar — built once) ─────────────────────────────
 
-    def _build(self):
+    def _build_chrome(self):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # ── header ──
-        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
-        hdr.grid(row=0, column=0, sticky="ew")
-        ctk.CTkLabel(hdr, text="✨  Memory Mapper",
-                     font=ctk.CTkFont(size=16, weight="bold"),
-                     text_color=("#FFFFFF", "#F0D090")
-                     ).pack(padx=20, pady=(14, 2), anchor="w")
-        ctk.CTkLabel(hdr,
-                     text="Files captured during these date ranges go to a "
-                          "named event folder instead of the default structure.",
-                     font=ctk.CTkFont(size=11),
-                     text_color=("#F0D090", "#9A8060"),
-                     wraplength=620, justify="left",
-                     ).pack(padx=20, pady=(0, 14), anchor="w")
+        # Header (text changes per mode via _render)
+        self._hdr = ctk.CTkFrame(self, corner_radius=0,
+                                 fg_color=("#B07020", "#2D2318"))
+        self._hdr.grid(row=0, column=0, sticky="ew")
+        self._hdr_title = ctk.CTkLabel(
+            self._hdr, text="",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=("#FFFFFF", "#F0D090"))
+        self._hdr_title.pack(padx=20, pady=(14, 2), anchor="w")
+        self._hdr_subtitle = ctk.CTkLabel(
+            self._hdr, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("#F0D090", "#9A8060"),
+            wraplength=620, justify="left")
+        self._hdr_subtitle.pack(padx=20, pady=(0, 14), anchor="w")
 
-        # ── scrollable list of rule cards ──
-        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        scroll.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
-        scroll.grid_columnconfigure(0, weight=1)
-        self._scroll = scroll
-        self._render_cards()
+        # Scrollable body — replaced wholesale on every render
+        self._body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._body.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        self._body.grid_columnconfigure(0, weight=1)
 
-        # ── fixed bottom bar ──
-        bottom = ctk.CTkFrame(self, corner_radius=0,
-                              fg_color=("#D8CDB8", "#231C14"))
-        bottom.grid(row=2, column=0, sticky="ew")
-        bottom.grid_columnconfigure(0, weight=1)
+        # Bottom action bar — buttons rebuilt per mode
+        self._bottom = ctk.CTkFrame(self, corner_radius=0,
+                                    fg_color=("#D8CDB8", "#231C14"))
+        self._bottom.grid(row=2, column=0, sticky="ew")
+        self._bottom.grid_columnconfigure(0, weight=1)
 
-        bar = ctk.CTkFrame(bottom, fg_color="transparent")
-        bar.grid(row=0, column=0, padx=20, pady=14, sticky="ew")
-        bar.grid_columnconfigure(1, weight=1)
+    # ── render dispatch ───────────────────────────────────────────────────────
 
-        ctk.CTkButton(bar, text="✨  Create Event", width=160,
-                      command=self._add_event
-                      ).grid(row=0, column=0, sticky="w")
-
-        end_bar = ctk.CTkFrame(bar, fg_color="transparent")
-        end_bar.grid(row=0, column=2, sticky="e")
-        ctk.CTkButton(end_bar, text="Cancel", width=100,
-                      fg_color=("#7A5535", "#3D3020"),
-                      hover_color=("#9A7050", "#4D4028"),
-                      command=self.destroy
-                      ).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(end_bar, text="💾  Save", width=120,
-                      command=self._save
-                      ).pack(side="left")
-
-    def _render_cards(self):
-        for w in self._scroll.winfo_children():
+    def _render(self):
+        # Clear body + bottom contents
+        for w in self._body.winfo_children():
+            w.destroy()
+        for w in self._bottom.winfo_children():
             w.destroy()
 
+        if self._mode == "list":
+            self._hdr_title.configure(text="✨  Memory Mapper")
+            self._hdr_subtitle.configure(
+                text="Files captured during these date ranges go to a named "
+                     "event folder instead of the default structure.")
+            self._render_list()
+            self._render_list_bottom()
+        else:
+            self._hdr_title.configure(
+                text="✨  " + ("New Event" if self._editing_idx is None
+                              else "Edit Event"))
+            self._hdr_subtitle.configure(
+                text="Define when this event happened and what folder its "
+                     "memories should go to.")
+            self._render_editor()
+            self._render_editor_bottom()
+
+    # ── LIST MODE ─────────────────────────────────────────────────────────────
+
+    def _render_list(self):
         if not self._rules:
-            empty = ctk.CTkFrame(self._scroll, fg_color=("#DDD0BE", "#2D2318"),
+            empty = ctk.CTkFrame(self._body, fg_color=("#DDD0BE", "#2D2318"),
                                  corner_radius=8)
             empty.pack(fill="x", padx=18, pady=18)
             ctk.CTkLabel(empty,
@@ -916,16 +954,35 @@ class MemoryMapperDialog(ctk.CTkToplevel):
                          ).pack(padx=20, pady=24, anchor="w")
             return
 
-        # newest priority first, then by start date
         ordered = sorted(self._rules, key=lambda r: (-r.priority, r.start))
-        for idx, rule in enumerate(ordered):
-            self._render_card(rule, idx)
+        for rule in ordered:
+            self._render_card(rule)
 
-    def _render_card(self, rule, idx_in_view):
+    def _render_list_bottom(self):
+        bar = ctk.CTkFrame(self._bottom, fg_color="transparent")
+        bar.grid(row=0, column=0, padx=20, pady=14, sticky="ew")
+        bar.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkButton(bar, text="✨  Create Event", width=160,
+                      command=self._begin_create
+                      ).grid(row=0, column=0, sticky="w")
+
+        end_bar = ctk.CTkFrame(bar, fg_color="transparent")
+        end_bar.grid(row=0, column=2, sticky="e")
+        ctk.CTkButton(end_bar, text="Cancel", width=100,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(end_bar, text="💾  Save All", width=120,
+                      command=self._save_all
+                      ).pack(side="left")
+
+    def _render_card(self, rule):
         # find the *original* index in self._rules so edit/delete affect right one
         orig_idx = self._rules.index(rule)
 
-        c = ctk.CTkFrame(self._scroll, fg_color=("#DDD0BE", "#2D2318"),
+        c = ctk.CTkFrame(self._body, fg_color=("#DDD0BE", "#2D2318"),
                          corner_radius=8,
                          border_width=1,
                          border_color=("#C8A878", "#4A3820"))
@@ -985,56 +1042,49 @@ class MemoryMapperDialog(ctk.CTkToplevel):
         # action buttons row
         btn_row = ctk.CTkFrame(c, fg_color="transparent")
         btn_row.grid(row=4, column=0, padx=14, pady=(8, 12), sticky="e")
-        ctk.CTkButton(btn_row, text="Edit", width=70, height=26,
+        ctk.CTkButton(btn_row, text="✏  Edit", width=86, height=26,
                       fg_color=("#7A5535", "#3D3020"),
                       hover_color=("#9A7050", "#4D4028"),
                       command=lambda i=orig_idx: self._edit_event(i),
                       ).pack(side="left", padx=(0, 6))
-        toggle_text = "Disable" if rule.enabled else "Enable"
-        ctk.CTkButton(btn_row, text=toggle_text, width=80, height=26,
+        toggle_text = "💤  Disable" if rule.enabled else "⚡  Enable"
+        ctk.CTkButton(btn_row, text=toggle_text, width=104, height=26,
                       fg_color=("#7A5535", "#3D3020"),
                       hover_color=("#9A7050", "#4D4028"),
                       command=lambda i=orig_idx: self._toggle_event(i),
                       ).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(btn_row, text="Delete", width=70, height=26,
+        ctk.CTkButton(btn_row, text="🗑  Delete", width=94, height=26,
                       fg_color="#B83828", hover_color="#8C2A1E",
                       text_color="#FFFFFF",
                       command=lambda i=orig_idx: self._delete_event(i),
                       ).pack(side="left")
 
-    # ── actions ───────────────────────────────────────────────────────────────
+    # ── list-mode actions ─────────────────────────────────────────────────────
 
-    def _add_event(self):
+    def _begin_create(self):
         from core.event_rules import EventRule
         from datetime import datetime, timedelta
-        # sensible defaults: today 00:00 → tomorrow 23:59
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        new = EventRule(
+        self._editing_idx = None
+        self._editing_rule = EventRule(
             name="New Event",
             start=today,
-            end=today + timedelta(days=1, hours=23, minutes=59),
+            end=today + timedelta(days=1, hours=23, minutes=45),
             folder_name="New Event",
             priority=10,
         )
-        self._open_editor(new, is_new=True)
+        self._mode = "edit"
+        self._render()
 
     def _edit_event(self, idx: int):
-        self._open_editor(self._rules[idx], is_new=False, idx=idx)
-
-    def _open_editor(self, rule, is_new: bool, idx: int = -1):
-        def on_save(updated):
-            if is_new:
-                self._rules.append(updated)
-            else:
-                self._rules[idx] = updated
-            self._render_cards()
-        EventEditorDialog(self, rule, on_save=on_save,
-                          known_devices=self._known_devices(),
-                          known_categories=self._known_categories())
+        self._editing_idx = idx
+        self._editing_rule = self._rules[idx]
+        self._mode = "edit"
+        self._render()
 
     def _toggle_event(self, idx: int):
         self._rules[idx].enabled = not self._rules[idx].enabled
-        self._render_cards()
+        self._render()
 
     def _delete_event(self, idx: int):
         rule = self._rules[idx]
@@ -1044,9 +1094,9 @@ class MemoryMapperDialog(ctk.CTkToplevel):
         if not ok:
             return
         self._rules.pop(idx)
-        self._render_cards()
+        self._render()
 
-    def _save(self):
+    def _save_all(self):
         self._config["event_rules"] = [r.to_dict() for r in self._rules]
         save_config(self._config)
         self._on_save(self._config)
@@ -1059,114 +1109,91 @@ class MemoryMapperDialog(ctk.CTkToplevel):
         return [c.get("name", "") for c in self._config.get("categories", [])
                 if c.get("name")]
 
+    # ── EDIT MODE ─────────────────────────────────────────────────────────────
 
-# ── Event editor dialog (used by Memory Mapper) ──────────────────────────────
+    def _render_editor(self):
+        """Inline event-editing form (replaces EventEditorDialog).
 
-class EventEditorDialog(ctk.CTkToplevel):
-    """Edit a single EventRule — name, dates, folder, filters, priority."""
-
-    def __init__(self, parent, rule, on_save,
-                 known_devices: list[str], known_categories: list[str]):
-        super().__init__(parent)
-        self.title("Edit Event")
-        self.geometry("560x640")
-        self.resizable(False, False)
-        _apply_icon(self)
-        self._rule = rule
-        self._on_save = on_save
-        self._known_devices = known_devices
-        self._known_categories = known_categories
-        self._build()
-        _center_on_parent(self, parent)
-        self.grab_set()
-
-    def _build(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-
-        # header
-        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
-        hdr.grid(row=0, column=0, sticky="ew")
-        ctk.CTkLabel(hdr, text="✨  Event Details",
-                     font=ctk.CTkFont(size=15, weight="bold"),
-                     text_color=("#FFFFFF", "#F0D090"),
-                     ).pack(padx=20, pady=12, anchor="w")
-
-        # body (scrollable)
-        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        body.grid(row=1, column=0, sticky="nsew")
-        body.grid_columnconfigure(0, weight=1)
+        Uses the same field-set as the old dialog but renders into self._body
+        so users stay inside one window.
+        """
+        rule = self._editing_rule
+        body = self._body
 
         # ── name ──
         ctk.CTkLabel(body, text="Display name",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      ).pack(padx=20, pady=(14, 2), anchor="w")
-        self._name_var = tk.StringVar(value=self._rule.name)
-        ctk.CTkEntry(body, textvariable=self._name_var,
+        self._ed_name = tk.StringVar(value=rule.name)
+        ctk.CTkEntry(body, textvariable=self._ed_name,
                      placeholder_text="e.g. HBD Party OOM 2025"
                      ).pack(padx=20, pady=(0, 4), fill="x")
 
-        # ── date range (structured pickers — no free-text errors) ──
-        ctk.CTkLabel(body, text="Date range",
+        # ── date range ──
+        date_hdr = ctk.CTkFrame(body, fg_color="transparent")
+        date_hdr.pack(padx=20, pady=(14, 0), anchor="w", fill="x")
+        ctk.CTkLabel(date_hdr, text="Date",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     ).pack(padx=20, pady=(14, 4), anchor="w")
+                     text_color=("#7A4A10", "#E0A030"), width=240, anchor="w",
+                     ).pack(side="left")
+        ctk.CTkLabel(date_hdr,
+                     text="Time  (optional · default 00:00 / 23:45)",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray50", "gray60"), anchor="w",
+                     ).pack(side="left", padx=(20, 0))
 
         ctk.CTkLabel(body, text="Start",
                      font=ctk.CTkFont(size=11),
                      text_color=("gray40", "gray65"),
-                     ).pack(padx=24, pady=(2, 2), anchor="w")
-        self._start_picker = DateTimePicker(body, initial=self._rule.start,
-                                            on_change=self._on_date_change)
-        self._start_picker.pack(padx=24, pady=(0, 6), anchor="w")
+                     ).pack(padx=24, pady=(8, 2), anchor="w")
+        self._ed_start = DateTimePicker(body, initial=rule.start,
+                                        on_change=self._on_ed_date_change)
+        self._ed_start.pack(padx=24, pady=(0, 6), anchor="w")
 
         ctk.CTkLabel(body, text="End  (inclusive)",
                      font=ctk.CTkFont(size=11),
                      text_color=("gray40", "gray65"),
                      ).pack(padx=24, pady=(4, 2), anchor="w")
-        self._end_picker = DateTimePicker(body, initial=self._rule.end,
-                                          end_of_day=True,
-                                          on_change=self._on_date_change)
-        self._end_picker.pack(padx=24, pady=(0, 4), anchor="w")
+        self._ed_end = DateTimePicker(body, initial=rule.end,
+                                      end_of_day=True,
+                                      on_change=self._on_ed_date_change)
+        self._ed_end.pack(padx=24, pady=(0, 4), anchor="w")
 
-        # live validation hint (red text if invalid)
-        self._date_warn_lbl = ctk.CTkLabel(body, text="",
-                                           font=ctk.CTkFont(size=10),
-                                           text_color="#D45030",
-                                           )
-        self._date_warn_lbl.pack(padx=24, pady=(0, 0), anchor="w")
-        # informational duration display (green)
-        self._date_info_lbl = ctk.CTkLabel(body, text="",
-                                           font=ctk.CTkFont(size=10),
-                                           text_color=("#3A7A3A", "#9ACC80"),
-                                           )
-        self._date_info_lbl.pack(padx=24, pady=(0, 4), anchor="w")
-        self._on_date_change()
+        self._ed_warn = ctk.CTkLabel(body, text="",
+                                     font=ctk.CTkFont(size=10),
+                                     text_color="#D45030")
+        self._ed_warn.pack(padx=24, pady=(0, 0), anchor="w")
+        self._ed_info = ctk.CTkLabel(body, text="",
+                                     font=ctk.CTkFont(size=10),
+                                     text_color=("#3A7A3A", "#9ACC80"))
+        self._ed_info.pack(padx=24, pady=(0, 4), anchor="w")
+        self._on_ed_date_change()
 
         # ── folder name ──
         ctk.CTkLabel(body, text="Folder name",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      ).pack(padx=20, pady=(14, 2), anchor="w")
-        self._folder_var = tk.StringVar(value=self._rule.folder_name)
-        ctk.CTkEntry(body, textvariable=self._folder_var,
+        self._ed_folder = tk.StringVar(value=rule.folder_name)
+        ctk.CTkEntry(body, textvariable=self._ed_folder,
                      placeholder_text="e.g. HBD PARTY OOM 2025"
                      ).pack(padx=20, pady=(0, 2), fill="x")
-        self._preview_lbl = ctk.CTkLabel(body, text="",
-                                         font=ctk.CTkFont(size=10),
-                                         text_color=("gray45", "gray55"),
-                                         )
-        self._preview_lbl.pack(padx=20, pady=(0, 4), anchor="w")
-        self._folder_var.trace_add("write", lambda *_: self._update_preview())
-        self._update_preview()
+        self._ed_preview = ctk.CTkLabel(body, text="",
+                                        font=ctk.CTkFont(size=10),
+                                        text_color=("gray45", "gray55"))
+        self._ed_preview.pack(padx=20, pady=(0, 4), anchor="w")
+        self._ed_folder.trace_add("write", lambda *_: self._update_ed_preview())
+        self._update_ed_preview()
 
         # ── filters: devices ──
         ctk.CTkLabel(body, text="Limit to devices  (optional)",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      ).pack(padx=20, pady=(14, 2), anchor="w")
-        self._dev_vars = {}
-        if self._known_devices:
-            for dev in self._known_devices:
-                v = tk.BooleanVar(value=dev in self._rule.devices)
-                self._dev_vars[dev] = v
+        self._ed_devs = {}
+        known_devices = self._known_devices()
+        if known_devices:
+            for dev in known_devices:
+                v = tk.BooleanVar(value=dev in rule.devices)
+                self._ed_devs[dev] = v
                 ctk.CTkCheckBox(body, text=dev, variable=v,
                                 font=ctk.CTkFont(size=11),
                                 ).pack(padx=24, pady=2, anchor="w")
@@ -1188,10 +1215,10 @@ class EventEditorDialog(ctk.CTkToplevel):
                      ).pack(padx=20, pady=(14, 2), anchor="w")
         cat_row = ctk.CTkFrame(body, fg_color="transparent")
         cat_row.pack(padx=20, pady=(0, 4), anchor="w")
-        self._cat_vars = {}
-        for i, cat in enumerate(self._known_categories or ["Photos", "Videos"]):
-            v = tk.BooleanVar(value=cat in self._rule.categories)
-            self._cat_vars[cat] = v
+        self._ed_cats = {}
+        for i, cat in enumerate(self._known_categories() or ["Photos", "Videos"]):
+            v = tk.BooleanVar(value=cat in rule.categories)
+            self._ed_cats[cat] = v
             ctk.CTkCheckBox(cat_row, text=cat, variable=v,
                             font=ctk.CTkFont(size=11),
                             ).grid(row=0, column=i, padx=(0, 14))
@@ -1199,13 +1226,11 @@ class EventEditorDialog(ctk.CTkToplevel):
         # ── priority + enabled ──
         prio_row = ctk.CTkFrame(body, fg_color="transparent")
         prio_row.pack(padx=20, pady=(14, 4), fill="x")
-
         ctk.CTkLabel(prio_row, text="Priority",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      ).pack(side="left")
-        self._priority_var = tk.IntVar(value=self._rule.priority)
-        ctk.CTkEntry(prio_row, textvariable=self._priority_var,
-                     width=80,
+        self._ed_priority = tk.IntVar(value=rule.priority)
+        ctk.CTkEntry(prio_row, textvariable=self._ed_priority, width=80
                      ).pack(side="left", padx=(8, 12))
         ctk.CTkLabel(prio_row,
                      text="higher wins on overlap",
@@ -1213,107 +1238,75 @@ class EventEditorDialog(ctk.CTkToplevel):
                      text_color=("gray45", "gray55"),
                      ).pack(side="left")
 
-        self._enabled_var = tk.BooleanVar(value=self._rule.enabled)
+        self._ed_enabled = tk.BooleanVar(value=rule.enabled)
         ctk.CTkCheckBox(body, text="Enabled",
-                        variable=self._enabled_var,
+                        variable=self._ed_enabled,
                         font=ctk.CTkFont(size=12, weight="bold"),
                         ).pack(padx=20, pady=(8, 18), anchor="w")
 
-        # ── bottom buttons ──
-        bottom = ctk.CTkFrame(self, corner_radius=0,
-                              fg_color=("#D8CDB8", "#231C14"))
-        bottom.grid(row=2, column=0, sticky="ew")
+    def _render_editor_bottom(self):
+        bar = ctk.CTkFrame(self._bottom, fg_color="transparent")
+        bar.grid(row=0, column=0, padx=20, pady=14, sticky="ew")
+        bar.grid_columnconfigure(1, weight=1)
 
-        btn_bar = ctk.CTkFrame(bottom, fg_color="transparent")
-        btn_bar.pack(padx=20, pady=14, anchor="e")
-        ctk.CTkButton(btn_bar, text="Cancel", width=100,
+        # back button on the left
+        ctk.CTkButton(bar, text="←  Back to list", width=160,
                       fg_color=("#7A5535", "#3D3020"),
                       hover_color=("#9A7050", "#4D4028"),
-                      command=self.destroy,
-                      ).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_bar, text="💾  Save", width=120,
-                      command=self._save,
-                      ).pack(side="left")
+                      command=self._cancel_edit
+                      ).grid(row=0, column=0, sticky="w")
 
-    def _update_preview(self):
-        folder = self._folder_var.get().strip() or "(name)"
-        self._preview_lbl.configure(
+        # apply on the right
+        ctk.CTkButton(bar, text="✓  Apply changes", width=160,
+                      command=self._apply_edit
+                      ).grid(row=0, column=2, sticky="e")
+
+    # ── editor helpers ────────────────────────────────────────────────────────
+
+    def _update_ed_preview(self):
+        folder = self._ed_folder.get().strip() or "(name)"
+        self._ed_preview.configure(
             text=f"Files will save to:  Events / {folder} /")
 
-    # ── validation ────────────────────────────────────────────────────────────
-
-    def _on_date_change(self):
-        """Live re-check whenever a date dropdown changes."""
+    def _on_ed_date_change(self):
         try:
-            start = self._start_picker.get_value()
-            end   = self._end_picker.get_value()
+            start = self._ed_start.get_value()
+            end   = self._ed_end.get_value()
         except Exception:
             return
         if end < start:
-            self._date_warn_lbl.configure(
+            self._ed_warn.configure(
                 text="⚠  End date is earlier than start — please adjust.")
-            self._date_info_lbl.configure(text="")
+            self._ed_info.configure(text="")
         else:
-            self._date_warn_lbl.configure(text="")
-            self._date_info_lbl.configure(
-                text=f"✓  Window length: {self._fmt_span(start, end)}")
+            self._ed_warn.configure(text="")
+            self._ed_info.configure(
+                text=f"✓  Window length: {_fmt_event_span(start, end)}")
 
-    @staticmethod
-    def _fmt_span(start, end) -> str:
-        delta = end - start
-        days  = delta.days
-        hours = delta.seconds // 3600
-        if days >= 1 and hours == 0:
-            return f"{days} day{'s' if days != 1 else ''}"
-        if days >= 1:
-            return f"{days} day{'s' if days != 1 else ''}, {hours} hr"
-        if hours >= 1:
-            mins = (delta.seconds % 3600) // 60
-            return f"{hours} hr {mins} min" if mins else f"{hours} hr"
-        return f"{delta.seconds // 60} min"
+    def _cancel_edit(self):
+        # Discard any in-progress changes and return to list view.
+        self._mode = "list"
+        self._editing_idx  = None
+        self._editing_rule = None
+        self._render()
 
-    @staticmethod
-    def _validate_folder_name(name: str) -> str | None:
-        """Return error message if invalid, else None."""
-        if not name:
-            return "Folder name cannot be empty."
-        # Windows reserves these characters in path components
-        bad = set('<>:"/\\|?*')
-        used = bad & set(name)
-        if used:
-            return f"Folder name cannot contain: {' '.join(sorted(used))}"
-        # leading/trailing dot or space breaks Windows
-        if name.endswith(" ") or name.endswith("."):
-            return "Folder name cannot end with a space or dot."
-        # reserved Windows names
-        reserved = {"con", "prn", "aux", "nul",
-                    "com1","com2","com3","com4","com5","com6","com7","com8","com9",
-                    "lpt1","lpt2","lpt3","lpt4","lpt5","lpt6","lpt7","lpt8","lpt9"}
-        if name.lower() in reserved:
-            return f"'{name}' is a reserved Windows name."
-        if len(name) > 200:
-            return "Folder name is too long (max 200 chars)."
-        return None
-
-    # ── save ──────────────────────────────────────────────────────────────────
-
-    def _save(self):
+    def _apply_edit(self):
         from core.event_rules import EventRule
-        name   = self._name_var.get().strip()
-        folder = self._folder_var.get().strip()
+        name   = self._ed_name.get().strip()
+        folder = self._ed_folder.get().strip()
 
         if not name:
             messagebox.showwarning("Missing display name",
                                    "Please enter a display name for this event.",
                                    parent=self)
             return
-        err = self._validate_folder_name(folder)
+        err = _validate_event_folder_name(folder)
         if err:
             messagebox.showwarning("Invalid folder name", err, parent=self)
             return
 
-        start = self._start_picker.get_value()
-        end   = self._end_picker.get_value()
+        start = self._ed_start.get_value()
+        end   = self._ed_end.get_value()
         if end < start:
             messagebox.showwarning(
                 "Invalid date range",
@@ -1324,7 +1317,7 @@ class EventEditorDialog(ctk.CTkToplevel):
             return
 
         try:
-            priority = int(self._priority_var.get())
+            priority = int(self._ed_priority.get())
         except (tk.TclError, ValueError):
             messagebox.showwarning("Invalid priority",
                                    "Priority must be a whole number.",
@@ -1341,17 +1334,74 @@ class EventEditorDialog(ctk.CTkToplevel):
             start       = start,
             end         = end,
             folder_name = folder,
-            devices     = [d for d, v in self._dev_vars.items() if v.get()],
-            categories  = [c for c, v in self._cat_vars.items() if v.get()],
+            devices     = [d for d, v in self._ed_devs.items() if v.get()],
+            categories  = [c for c, v in self._ed_cats.items() if v.get()],
             priority    = priority,
-            enabled     = self._enabled_var.get(),
+            enabled     = self._ed_enabled.get(),
         )
-        self._on_save(updated)
-        self.destroy()
+
+        if self._editing_idx is None:
+            self._rules.append(updated)
+        else:
+            self._rules[self._editing_idx] = updated
+
+        # Return to list view to show the change immediately
+        self._mode = "list"
+        self._editing_idx  = None
+        self._editing_rule = None
+        self._render()
 
 
-def _has_time(dt) -> bool:
+# ── Event-rule helpers (used by Memory Mapper inline editor) ─────────────────
+
+def _has_time(dt: datetime) -> bool:
+    """True if the datetime carries a meaningful time component."""
     return bool(dt.hour or dt.minute or dt.second)
+
+
+def _fmt_event_span(start: datetime, end: datetime) -> str:
+    """Human-readable duration between two datetimes."""
+    delta = end - start
+    days  = delta.days
+    hours = delta.seconds // 3600
+    if days >= 1 and hours == 0:
+        return f"{days} day{'s' if days != 1 else ''}"
+    if days >= 1:
+        return f"{days} day{'s' if days != 1 else ''}, {hours} hr"
+    if hours >= 1:
+        mins = (delta.seconds % 3600) // 60
+        return f"{hours} hr {mins} min" if mins else f"{hours} hr"
+    return f"{delta.seconds // 60} min"
+
+
+def _validate_event_folder_name(name: str) -> str | None:
+    """Return error message if invalid, else None.
+
+    Catches Windows path-illegal characters, reserved names, length limits,
+    and trailing-dot/space which silently break Windows folder creation.
+    """
+    if not name:
+        return "Folder name cannot be empty."
+    bad = set('<>:"/\\|?*')
+    used = bad & set(name)
+    if used:
+        return f"Folder name cannot contain: {' '.join(sorted(used))}"
+    if name.endswith(" ") or name.endswith("."):
+        return "Folder name cannot end with a space or dot."
+    reserved = {"con", "prn", "aux", "nul",
+                "com1","com2","com3","com4","com5","com6","com7","com8","com9",
+                "lpt1","lpt2","lpt3","lpt4","lpt5","lpt6","lpt7","lpt8","lpt9"}
+    if name.lower() in reserved:
+        return f"'{name}' is a reserved Windows name."
+    if len(name) > 200:
+        return "Folder name is too long (max 200 chars)."
+    return None
+
+
+# EventEditorDialog (v1.2-pre) was removed — editor is now inline in
+# MemoryMapperDialog. The two helpers above (_fmt_event_span,
+# _validate_event_folder_name) are the public interface that replaced
+# its static methods.
 
 
 # ── Duplicate History dialog ──────────────────────────────────────────────────
@@ -2708,7 +2758,8 @@ class App(ctk.CTk):
         self._log_text.configure(yscrollcommand=sb.set)
 
         for tag, color in [("ok","#7AB648"),("dupe","#C8882A"),
-                           ("error","#D45030"),("info","#9A8870"),("head","#E0A030")]:
+                           ("error","#D45030"),("info","#9A8870"),("head","#E0A030"),
+                           ("event","#F0C040")]:   # Memory Mapper matches → bright gold
             self._log_text.tag_configure(tag, foreground=color)
 
         # Progress bars
@@ -2964,9 +3015,15 @@ class App(ctk.CTk):
                         pfx = {"moved":"MOV","copied":"CPY","dry_run":"DRY"
                                }.get(evt.status, evt.status[:3].upper())
                         dest_rel = self._rel(evt.dest_path)
-                        evt_tag  = f"  [✨ {evt.event_name}]" if evt.event_name else ""
-                        self._log("ok",
-                                  f"[{pfx}] {fname}  =>  {dest_rel}  ({evt.device}){evt_tag}")
+                        # Use distinct gold colour for Memory Mapper matches so
+                        # they're visually separable from regular successful moves.
+                        if evt.event_name:
+                            self._log("event",
+                                      f"[{pfx}] ✨ {fname}  =>  {dest_rel}  "
+                                      f"({evt.device})  [{evt.event_name}]")
+                        else:
+                            self._log("ok",
+                                      f"[{pfx}] {fname}  =>  {dest_rel}  ({evt.device})")
                     elif evt.status == "duplicate":
                         self._cnt_dupes += 1
                         self._log("dupe", f"[DUP] {fname}  (duplicate quarantined)")
