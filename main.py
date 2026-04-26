@@ -21,7 +21,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.3.7"
+APP_VERSION  = "1.3.8"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 #
@@ -2513,7 +2513,7 @@ class SettingsDialog(ctk.CTkToplevel):
     def __init__(self, parent, settings: dict, sound: SoundEngine, on_save):
         super().__init__(parent)
         self.title("Settings")
-        self.geometry("520x620")
+        self.geometry("540x720")
         self.resizable(False, False)
         _apply_icon(self)
 
@@ -2558,6 +2558,9 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._section(body, "🌐  Language")
         self._build_language(body)
+
+        self._section(body, "🏭  Factory Reset")
+        self._build_factory_reset(body)
 
         # ── fixed bottom buttons ──
         bottom = ctk.CTkFrame(self, corner_radius=0,
@@ -2708,6 +2711,139 @@ class SettingsDialog(ctk.CTkToplevel):
                      font=ctk.CTkFont(size=11),
                      text_color=("gray45", "gray55")
                      ).pack(padx=14, pady=(0, 12), anchor="w")
+
+    # ── factory reset section (v1.3.8) ────────────────────────────────────────
+
+    def _build_factory_reset(self, parent):
+        """Danger-zone section — wipes user data back to factory defaults."""
+        c = self._card(parent)
+        ctk.CTkLabel(c,
+                     text="Reset everything to factory defaults — useful when you want\n"
+                          "to start over or test the app from a fresh state.",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray45", "gray60"),
+                     justify="left",
+                     ).pack(padx=14, pady=(12, 8), anchor="w")
+
+        # what will be reset
+        ctk.CTkLabel(c, text="Will be reset:",
+                     font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=("#9A3010", "#E07050"),
+                     ).pack(padx=14, pady=(0, 2), anchor="w")
+        for line in (
+            "• All Memory Mapper events",
+            "• Device Manager mappings",
+            "• Folder structure customisation",
+            "• App settings (theme, sound, etc.)",
+        ):
+            ctk.CTkLabel(c, text=line,
+                         font=ctk.CTkFont(size=11),
+                         text_color=("gray40", "gray70"),
+                         ).pack(padx=24, pady=1, anchor="w")
+
+        # what stays
+        ctk.CTkLabel(c, text="Will NOT be touched:",
+                     font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=("#2A6A2A", "#7AB648"),
+                     ).pack(padx=14, pady=(8, 2), anchor="w")
+        for line in (
+            "• Files in your destination folders",
+            "• Activity logs",
+            "• Duplicate detection cache (lives in destination/.organizer/)",
+        ):
+            ctk.CTkLabel(c, text=line,
+                         font=ctk.CTkFont(size=11),
+                         text_color=("gray40", "gray70"),
+                         ).pack(padx=24, pady=1, anchor="w")
+
+        ctk.CTkLabel(c,
+                     text="A timestamped backup of your current config is created\n"
+                          "first, so you can restore manually if you change your mind.",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray50", "gray55"),
+                     justify="left",
+                     ).pack(padx=14, pady=(10, 4), anchor="w")
+
+        ctk.CTkButton(c, text="🏭  Reset to Factory Defaults",
+                      height=32,
+                      fg_color="#B83828", hover_color="#8C2A1E",
+                      text_color="#FFFFFF",
+                      command=self._do_factory_reset,
+                      ).pack(padx=14, pady=(8, 14), anchor="w")
+
+    def _do_factory_reset(self):
+        """Backup current config + settings, write factory defaults, restart hint.
+
+        We deliberately FORCE-CLOSE the app afterwards because the in-memory
+        state (config dict already loaded into the Organizer, theme already
+        applied to CTk, sound engine configured) would otherwise stay stale
+        until the user manually restarts. A clean exit + relaunch removes
+        any chance of partial-state confusion.
+        """
+        ok = messagebox.askyesno(
+            "Confirm Factory Reset",
+            "Reset everything to factory defaults?\n\n"
+            "Your current config + settings will be backed up to:\n"
+            f"{USER_DATA_DIR}\n\n"
+            "The app will close immediately after — restart it to begin\n"
+            "from a clean state.\n\n"
+            "Continue?",
+            icon="warning",
+            parent=self,
+        )
+        if not ok:
+            return
+
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            backed_up: list[str] = []
+
+            for src_path, prefix in ((CONFIG_PATH, "config"),
+                                      (SETTINGS_PATH, "settings")):
+                if src_path.exists():
+                    backup = USER_DATA_DIR / f"{prefix}.backup.{timestamp}.json"
+                    shutil.copy2(src_path, backup)
+                    backed_up.append(backup.name)
+
+            # Replace config with factory defaults
+            if _DEFAULT_CONFIG_PATH.exists():
+                shutil.copy2(_DEFAULT_CONFIG_PATH, CONFIG_PATH)
+            elif CONFIG_PATH.exists():
+                # No bundled default — remove user file so next launch
+                # falls through to legacy or in-code defaults.
+                CONFIG_PATH.unlink()
+
+            # Settings: just delete — next launch loads _DEFAULT_SETTINGS
+            if SETTINGS_PATH.exists():
+                SETTINGS_PATH.unlink()
+
+        except Exception as exc:
+            messagebox.showerror(
+                "Reset Failed",
+                f"Could not complete factory reset:\n\n{exc}\n\n"
+                "Your existing config is unchanged.",
+                parent=self,
+            )
+            return
+
+        backup_summary = ("\n".join(f"   • {n}" for n in backed_up)
+                          if backed_up else "   (no prior config to back up)")
+        messagebox.showinfo(
+            "Factory Reset Complete",
+            f"All settings reset to factory defaults.  ✓\n\n"
+            f"Backups saved:\n{backup_summary}\n\n"
+            f"Folder: {USER_DATA_DIR}\n\n"
+            "The app will close now. Please restart it.",
+            parent=self,
+        )
+
+        # Walk up to the App window (Tk root) and destroy it. This bypasses
+        # the SettingsDialog's normal _save path so the in-memory settings
+        # var won't be written back over the freshly-deleted settings.json.
+        root = self
+        while root.master is not None:
+            root = root.master
+        root.destroy()
 
     # ── save ──────────────────────────────────────────────────────────────────
 
