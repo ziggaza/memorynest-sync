@@ -21,7 +21,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.3.5"
+APP_VERSION  = "1.3.6"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 #
@@ -62,8 +62,15 @@ def _resolve_user_data_dir() -> Path:
 BASE_DIR      = Path(__file__).parent
 USER_DATA_DIR = _resolve_user_data_dir()
 
-# Default (template) config ships with the app and is read-only.
-_DEFAULT_CONFIG_PATH = BASE_DIR / "config.json"
+# Bundled clean defaults (read-only). config.default.json is the *factory*
+# state every fresh install starts from — empty event_rules, empty
+# auto_detected_keys, curated device_mappings, no user pollution. It is the
+# only config file checked into git; per-user config.json is git-ignored
+# and lives in the user data dir at runtime.
+_DEFAULT_CONFIG_PATH = BASE_DIR / "config.default.json"
+# Legacy fallback for installs built before v1.3.6 that bundled config.json
+# under that name. Looked up only if config.default.json is missing.
+_LEGACY_CONFIG_PATH  = BASE_DIR / "config.json"
 
 # Runtime/user paths — all writable
 CONFIG_PATH    = USER_DATA_DIR / "config.json"
@@ -71,14 +78,18 @@ SETTINGS_PATH  = USER_DATA_DIR / "settings.json"
 LOG_DIR        = USER_DATA_DIR / "logs"
 SOUND_CACHE    = USER_DATA_DIR / "sounds"
 
-# First-run bootstrap: copy bundled default config into the user dir so the
-# Settings UI has something to read/write. Keeps the user's edits safe on
-# subsequent app upgrades.
-if not CONFIG_PATH.exists() and _DEFAULT_CONFIG_PATH.exists():
-    try:
-        shutil.copy2(_DEFAULT_CONFIG_PATH, CONFIG_PATH)
-    except Exception:
-        pass
+# First-run bootstrap: copy the factory-clean default into the user dir so
+# the app starts with sensible defaults but the user's edits survive future
+# upgrades (we never overwrite an existing user CONFIG_PATH).
+if not CONFIG_PATH.exists():
+    src = (_DEFAULT_CONFIG_PATH if _DEFAULT_CONFIG_PATH.exists()
+           else _LEGACY_CONFIG_PATH if _LEGACY_CONFIG_PATH.exists()
+           else None)
+    if src is not None:
+        try:
+            shutil.copy2(src, CONFIG_PATH)
+        except Exception:
+            pass
 
 log_setup(LOG_DIR)
 
@@ -97,8 +108,8 @@ except Exception:
 _DEFAULT_SETTINGS = {
     "theme":          "dark",
     "operation":      "copy",
-    # sound system (added v1.1)
-    "sound_enabled":  False,         # off by default — opt-in
+    # sound system (added v1.1) — Nature theme on by default in v1.3.6
+    "sound_enabled":  True,
     "sound_theme":    "nature",      # "nature" | "minimal" | "none"
     "sound_volume":   0.6,           # 0.0 – 1.0
     # notifications (added v1.1)
