@@ -4,7 +4,10 @@ Improvements: theme toggle, move/copy, device-manager auto-populate, folder-stru
 """
 
 import json
+import os
 import queue
+import shutil
+import sys
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -18,13 +21,64 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.3.2"
+APP_VERSION  = "1.3.3"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
-BASE_DIR     = Path(__file__).parent
-CONFIG_PATH  = BASE_DIR / "config.json"
-SETTINGS_PATH= BASE_DIR / "settings.json"
-LOG_DIR      = BASE_DIR / "logs"
+#
+# BASE_DIR        — read-only. Bundled assets, default config, core modules.
+#                   When frozen by PyInstaller, this is the install dir
+#                   (e.g. C:\Program Files (x86)\MemoryNest Sync\_internal\).
+#                   Apps must NOT write here on Windows — Program Files is
+#                   admin-only by default.
+#
+# USER_DATA_DIR   — writable. Logs, user settings, user config, sound cache.
+#                   Per-user, survives app upgrade and uninstall, no admin
+#                   needed. Maps to %LOCALAPPDATA%\MemoryNest Sync\ on Windows.
+#
+def _resolve_user_data_dir() -> Path:
+    """Return a per-user writable directory for runtime data.
+
+    - Frozen build (PyInstaller):
+        Windows  →  %LOCALAPPDATA%\\MemoryNest Sync
+        macOS    →  ~/Library/Application Support/MemoryNest Sync
+        Linux    →  ~/.local/share/MemoryNest Sync
+    - Source / dev run:
+        alongside main.py (same as BASE_DIR — convenient for testing).
+    """
+    if not getattr(sys, "frozen", False):
+        return Path(__file__).parent
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA",
+                                   str(Path.home() / "AppData" / "Local")))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path.home() / ".local" / "share"
+    path = base / "MemoryNest Sync"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+BASE_DIR      = Path(__file__).parent
+USER_DATA_DIR = _resolve_user_data_dir()
+
+# Default (template) config ships with the app and is read-only.
+_DEFAULT_CONFIG_PATH = BASE_DIR / "config.json"
+
+# Runtime/user paths — all writable
+CONFIG_PATH    = USER_DATA_DIR / "config.json"
+SETTINGS_PATH  = USER_DATA_DIR / "settings.json"
+LOG_DIR        = USER_DATA_DIR / "logs"
+SOUND_CACHE    = USER_DATA_DIR / "sounds"
+
+# First-run bootstrap: copy bundled default config into the user dir so the
+# Settings UI has something to read/write. Keeps the user's edits safe on
+# subsequent app upgrades.
+if not CONFIG_PATH.exists() and _DEFAULT_CONFIG_PATH.exists():
+    try:
+        shutil.copy2(_DEFAULT_CONFIG_PATH, CONFIG_PATH)
+    except Exception:
+        pass
 
 log_setup(LOG_DIR)
 
@@ -2804,7 +2858,9 @@ class App(ctk.CTk):
         ctk.set_default_color_theme(str(BASE_DIR / "assets" / "nest_theme.json"))
 
         # sound engine (renders WAVs on first launch — quiet by default)
-        self._sound = SoundEngine(BASE_DIR / "assets" / "sounds")
+        # Sound cache lives in user-data dir so the engine can write WAVs
+        # on first launch even when the app itself is in Program Files.
+        self._sound = SoundEngine(SOUND_CACHE)
         self._apply_sound_settings()
 
         self._build_layout()
