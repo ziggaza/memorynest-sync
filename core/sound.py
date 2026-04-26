@@ -170,19 +170,42 @@ def _render(theme: str, event: str) -> np.ndarray:
 # ── Nature theme — bird/breeze inspired ───────────────────────────────────────
 
 def _nature_start() -> np.ndarray:
-    """Soft leaf rustle — a brief filtered noise burst."""
-    n = _smooth(_noise(0.28), win=14)
-    env = _envelope(len(n), attack_s=0.04, decay_s=0.22)
-    return n * env * 0.5
+    """Cheerful 3-note ascending bird tweet — 'let's begin!'
+
+    Designed to feel uplifting and inviting without overlapping the
+    completion sound's character. Three short rising chirps in a major-
+    third progression (1700 → 2200 → 2700 Hz), each with its own micro
+    upward sweep so it sounds organic, not synthetic.
+    """
+    notes = [
+        (1700, 1900, 0.08),   # low chirp
+        (2200, 2450, 0.07),   # mid chirp
+        (2700, 3050, 0.10),   # bright top chirp (slightly longer)
+    ]
+    parts = []
+    gap = np.zeros(int(SAMPLE_RATE * 0.025))
+    for i, (f1, f2, dur) in enumerate(notes):
+        c = _logchirp(f1, f2, dur)
+        c *= _envelope(len(c), 0.004, dur - 0.005)
+        parts.append(c)
+        if i < len(notes) - 1:
+            parts.append(gap)
+    return np.concatenate(parts) * 0.5
 
 
 def _nature_complete() -> np.ndarray:
-    """Two-note bird chirp — quick rising sweeps."""
-    c1 = _logchirp(2200, 3200, 0.12)
-    c1 *= _envelope(len(c1), 0.005, 0.115)
-    gap = np.zeros(int(SAMPLE_RATE * 0.045))
-    c2 = _logchirp(2600, 3700, 0.10)
-    c2 *= _envelope(len(c2), 0.005, 0.095)
+    """Two-note bird song — descending then resting (a 'finished' feel).
+
+    Differs from start in shape: longer notes, downward inflection on the
+    second one, more sustained — 'done, all settled' rather than 'go!'.
+    """
+    # first note: gentle rising sweep
+    c1 = _logchirp(2400, 2900, 0.16)
+    c1 *= _envelope(len(c1), 0.006, 0.15)
+    gap = np.zeros(int(SAMPLE_RATE * 0.06))
+    # second note: descending sweep — resolves the phrase
+    c2 = _logchirp(2700, 2200, 0.20)
+    c2 *= _envelope(len(c2), 0.006, 0.19)
     return np.concatenate([c1, gap, c2]) * 0.55
 
 

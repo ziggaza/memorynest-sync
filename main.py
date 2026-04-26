@@ -28,11 +28,13 @@ LOG_DIR      = BASE_DIR / "logs"
 
 log_setup(LOG_DIR)
 
-# ── Windows taskbar icon fix ───────────────────────────────────────────────────
+# ── Windows taskbar icon + notification source name ───────────────────────────
+# AUMID's last segment is what Windows shows as the notification "From: <app>"
+# header, so it must be user-friendly (not a vendor/branding identifier).
 try:
     import ctypes as _ctypes
     _ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-        "ZigGaZa.MemoryNestSync.1"
+        "MemoryNestSync"
     )
 except Exception:
     pass
@@ -690,6 +692,137 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Date+time picker widget (used by Event Editor) ───────────────────────────
+
+_MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun",
+               "Jul","Aug","Sep","Oct","Nov","Dec"]
+
+
+class DateTimePicker(ctk.CTkFrame):
+    """Structured date + time picker — five OptionMenus, no free-text errors.
+
+    Year range: 2000 → current year + 5
+    Month: Jan…Dec
+    Day:   1…N (re-clamped when year/month changes; e.g. Feb 29 only in leap)
+    Hour:  00…23
+    Minute: 00, 15, 30, 45  (15-min granularity is plenty for event windows)
+
+    `include_time=False` collapses to date-only; the resulting datetime has
+    h=m=s=0 (or 23:59:59 if `end_of_day=True`) so callers can use it for
+    span boundaries directly.
+    """
+
+    YEAR_MIN = 2000
+
+    def __init__(self, parent, *, initial: datetime,
+                 end_of_day: bool = False,
+                 on_change=None, **kw):
+        super().__init__(parent, fg_color="transparent", **kw)
+        self._end_of_day = end_of_day
+        self._on_change  = on_change or (lambda: None)
+        self._suspend    = False   # block on_change loops while we re-clamp
+
+        from datetime import datetime as _dt
+        year_max = _dt.now().year + 5
+
+        self._year   = tk.StringVar(value=str(initial.year))
+        self._month  = tk.StringVar(value=_MONTH_ABBR[initial.month - 1])
+        self._day    = tk.StringVar(value=f"{initial.day:02d}")
+        self._hour   = tk.StringVar(value=f"{initial.hour:02d}")
+        # snap minute to nearest 15
+        m = (initial.minute // 15) * 15
+        self._minute = tk.StringVar(value=f"{m:02d}")
+
+        years = [str(y) for y in range(self.YEAR_MIN, year_max + 1)]
+        hours = [f"{h:02d}" for h in range(24)]
+        mins  = ["00", "15", "30", "45"]
+
+        # row layout:  [Year ▾]  [Month ▾]  [Day ▾]    [Hour ▾] : [Min ▾]
+        kwargs = dict(font=ctk.CTkFont(size=11),
+                      command=lambda _v: self._handle_change())
+
+        self._opt_year  = ctk.CTkOptionMenu(self, variable=self._year,
+                                            values=years, width=80, **kwargs)
+        self._opt_month = ctk.CTkOptionMenu(self, variable=self._month,
+                                            values=_MONTH_ABBR, width=80, **kwargs)
+        self._opt_day   = ctk.CTkOptionMenu(self, variable=self._day,
+                                            values=self._days_for(initial.year, initial.month),
+                                            width=68, **kwargs)
+        self._opt_hour  = ctk.CTkOptionMenu(self, variable=self._hour,
+                                            values=hours, width=68, **kwargs)
+        self._opt_min   = ctk.CTkOptionMenu(self, variable=self._minute,
+                                            values=mins,  width=68, **kwargs)
+
+        self._opt_year .grid(row=0, column=0, padx=(0, 4))
+        self._opt_month.grid(row=0, column=1, padx=4)
+        self._opt_day  .grid(row=0, column=2, padx=4)
+        ctk.CTkLabel(self, text="  ", width=8).grid(row=0, column=3)
+        self._opt_hour .grid(row=0, column=4, padx=(0, 2))
+        ctk.CTkLabel(self, text=":", font=ctk.CTkFont(size=14, weight="bold")
+                     ).grid(row=0, column=5)
+        self._opt_min  .grid(row=0, column=6, padx=(2, 0))
+
+    # ── public ────────────────────────────────────────────────────────────────
+
+    def get_value(self) -> datetime:
+        """Build the selected datetime. Always valid by construction."""
+        y = int(self._year.get())
+        m = _MONTH_ABBR.index(self._month.get()) + 1
+        d = int(self._day.get())
+        h = int(self._hour.get())
+        mi = int(self._minute.get())
+        s = 59 if self._end_of_day else 0
+        # Day was clamped earlier so this won't raise — but guard anyway
+        try:
+            return datetime(y, m, d, h, mi, s)
+        except ValueError:
+            return datetime(y, m, 1, h, mi, s)
+
+    def set_value(self, dt: datetime):
+        self._suspend = True
+        try:
+            self._year .set(str(dt.year))
+            self._month.set(_MONTH_ABBR[dt.month - 1])
+            self._opt_day.configure(values=self._days_for(dt.year, dt.month))
+            self._day  .set(f"{min(dt.day, _last_day(dt.year, dt.month)):02d}")
+            self._hour .set(f"{dt.hour:02d}")
+            self._minute.set(f"{(dt.minute // 15) * 15:02d}")
+        finally:
+            self._suspend = False
+
+    # ── private ───────────────────────────────────────────────────────────────
+
+    def _handle_change(self):
+        if self._suspend:
+            return
+        # Re-clamp day list when year or month changes
+        try:
+            y = int(self._year.get())
+            m = _MONTH_ABBR.index(self._month.get()) + 1
+        except (ValueError, IndexError):
+            return
+        new_days = self._days_for(y, m)
+        self._opt_day.configure(values=new_days)
+        # If current day is out of range, snap to last valid day
+        try:
+            d = int(self._day.get())
+            if d > _last_day(y, m):
+                self._day.set(new_days[-1])
+        except ValueError:
+            self._day.set(new_days[0])
+        self._on_change()
+
+    @staticmethod
+    def _days_for(year: int, month: int) -> list[str]:
+        return [f"{d:02d}" for d in range(1, _last_day(year, month) + 1)]
+
+
+def _last_day(year: int, month: int) -> int:
+    """Last day of the given month — handles Feb 29 in leap years."""
+    import calendar
+    return calendar.monthrange(year, month)[1]
+
+
 # ── Memory Mapper (event-based folders) ──────────────────────────────────────
 
 class MemoryMapperDialog(ctk.CTkToplevel):
@@ -973,32 +1106,41 @@ class EventEditorDialog(ctk.CTkToplevel):
                      placeholder_text="e.g. HBD Party OOM 2025"
                      ).pack(padx=20, pady=(0, 4), fill="x")
 
-        # ── date range ──
-        ctk.CTkLabel(body, text="Date range  (YYYY-MM-DD HH:MM)",
+        # ── date range (structured pickers — no free-text errors) ──
+        ctk.CTkLabel(body, text="Date range",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     ).pack(padx=20, pady=(14, 2), anchor="w")
-        date_row = ctk.CTkFrame(body, fg_color="transparent")
-        date_row.pack(padx=20, pady=(0, 4), fill="x")
-        date_row.grid_columnconfigure((0, 2), weight=1)
+                     ).pack(padx=20, pady=(14, 4), anchor="w")
 
-        ctk.CTkLabel(date_row, text="Start", width=40
-                     ).grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(date_row, text="End", width=40
-                     ).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        self._start_var = tk.StringVar(value=self._rule.start.strftime("%Y-%m-%d %H:%M"))
-        self._end_var   = tk.StringVar(value=self._rule.end.strftime("%Y-%m-%d %H:%M"))
-        ctk.CTkEntry(date_row, textvariable=self._start_var,
-                     ).grid(row=1, column=0, sticky="ew")
-        ctk.CTkLabel(date_row, text="→", font=ctk.CTkFont(size=14)
-                     ).grid(row=1, column=1, padx=8)
-        ctk.CTkEntry(date_row, textvariable=self._end_var,
-                     ).grid(row=1, column=2, sticky="ew", padx=(8, 0))
+        ctk.CTkLabel(body, text="Start",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray40", "gray65"),
+                     ).pack(padx=24, pady=(2, 2), anchor="w")
+        self._start_picker = DateTimePicker(body, initial=self._rule.start,
+                                            on_change=self._on_date_change)
+        self._start_picker.pack(padx=24, pady=(0, 6), anchor="w")
 
-        ctk.CTkLabel(body,
-                     text="Tip: Omit time (just YYYY-MM-DD) to span the whole day.",
-                     font=ctk.CTkFont(size=10),
-                     text_color=("gray45", "gray55"),
-                     ).pack(padx=20, pady=(2, 0), anchor="w")
+        ctk.CTkLabel(body, text="End  (inclusive)",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray40", "gray65"),
+                     ).pack(padx=24, pady=(4, 2), anchor="w")
+        self._end_picker = DateTimePicker(body, initial=self._rule.end,
+                                          end_of_day=True,
+                                          on_change=self._on_date_change)
+        self._end_picker.pack(padx=24, pady=(0, 4), anchor="w")
+
+        # live validation hint (red text if invalid)
+        self._date_warn_lbl = ctk.CTkLabel(body, text="",
+                                           font=ctk.CTkFont(size=10),
+                                           text_color="#D45030",
+                                           )
+        self._date_warn_lbl.pack(padx=24, pady=(0, 0), anchor="w")
+        # informational duration display (green)
+        self._date_info_lbl = ctk.CTkLabel(body, text="",
+                                           font=ctk.CTkFont(size=10),
+                                           text_color=("#3A7A3A", "#9ACC80"),
+                                           )
+        self._date_info_lbl.pack(padx=24, pady=(0, 4), anchor="w")
+        self._on_date_change()
 
         # ── folder name ──
         ctk.CTkLabel(body, text="Folder name",
@@ -1098,36 +1240,101 @@ class EventEditorDialog(ctk.CTkToplevel):
         self._preview_lbl.configure(
             text=f"Files will save to:  Events / {folder} /")
 
+    # ── validation ────────────────────────────────────────────────────────────
+
+    def _on_date_change(self):
+        """Live re-check whenever a date dropdown changes."""
+        try:
+            start = self._start_picker.get_value()
+            end   = self._end_picker.get_value()
+        except Exception:
+            return
+        if end < start:
+            self._date_warn_lbl.configure(
+                text="⚠  End date is earlier than start — please adjust.")
+            self._date_info_lbl.configure(text="")
+        else:
+            self._date_warn_lbl.configure(text="")
+            self._date_info_lbl.configure(
+                text=f"✓  Window length: {self._fmt_span(start, end)}")
+
+    @staticmethod
+    def _fmt_span(start, end) -> str:
+        delta = end - start
+        days  = delta.days
+        hours = delta.seconds // 3600
+        if days >= 1 and hours == 0:
+            return f"{days} day{'s' if days != 1 else ''}"
+        if days >= 1:
+            return f"{days} day{'s' if days != 1 else ''}, {hours} hr"
+        if hours >= 1:
+            mins = (delta.seconds % 3600) // 60
+            return f"{hours} hr {mins} min" if mins else f"{hours} hr"
+        return f"{delta.seconds // 60} min"
+
+    @staticmethod
+    def _validate_folder_name(name: str) -> str | None:
+        """Return error message if invalid, else None."""
+        if not name:
+            return "Folder name cannot be empty."
+        # Windows reserves these characters in path components
+        bad = set('<>:"/\\|?*')
+        used = bad & set(name)
+        if used:
+            return f"Folder name cannot contain: {' '.join(sorted(used))}"
+        # leading/trailing dot or space breaks Windows
+        if name.endswith(" ") or name.endswith("."):
+            return "Folder name cannot end with a space or dot."
+        # reserved Windows names
+        reserved = {"con", "prn", "aux", "nul",
+                    "com1","com2","com3","com4","com5","com6","com7","com8","com9",
+                    "lpt1","lpt2","lpt3","lpt4","lpt5","lpt6","lpt7","lpt8","lpt9"}
+        if name.lower() in reserved:
+            return f"'{name}' is a reserved Windows name."
+        if len(name) > 200:
+            return "Folder name is too long (max 200 chars)."
+        return None
+
+    # ── save ──────────────────────────────────────────────────────────────────
+
     def _save(self):
-        from core.event_rules import EventRule, try_parse_datetime
-        name = self._name_var.get().strip()
+        from core.event_rules import EventRule
+        name   = self._name_var.get().strip()
         folder = self._folder_var.get().strip()
-        if not name or not folder:
-            messagebox.showwarning("Missing fields",
-                                   "Display name and folder name are required.",
+
+        if not name:
+            messagebox.showwarning("Missing display name",
+                                   "Please enter a display name for this event.",
                                    parent=self)
+            return
+        err = self._validate_folder_name(folder)
+        if err:
+            messagebox.showwarning("Invalid folder name", err, parent=self)
             return
 
-        start = try_parse_datetime(self._start_var.get().strip())
-        raw_end = self._end_var.get().strip()
-        end = try_parse_datetime(raw_end)
-        if start is None or end is None:
-            messagebox.showwarning("Invalid date",
-                                   "Use format YYYY-MM-DD or YYYY-MM-DD HH:MM.",
-                                   parent=self)
-            return
-        # If end has no time component, push it to 23:59:59 so the whole day is covered
-        if not _has_time(end) and len(raw_end) <= 10:
-            end = end.replace(hour=23, minute=59, second=59)
+        start = self._start_picker.get_value()
+        end   = self._end_picker.get_value()
         if end < start:
-            messagebox.showwarning("Invalid range",
-                                   "End must be after start.", parent=self)
+            messagebox.showwarning(
+                "Invalid date range",
+                "End date/time must not be earlier than start.\n\n"
+                f"Start: {start.strftime('%d %b %Y  %H:%M')}\n"
+                f"End:   {end.strftime('%d %b %Y  %H:%M')}",
+                parent=self)
             return
 
         try:
             priority = int(self._priority_var.get())
         except (tk.TclError, ValueError):
-            priority = 0
+            messagebox.showwarning("Invalid priority",
+                                   "Priority must be a whole number.",
+                                   parent=self)
+            return
+        if priority < 0:
+            messagebox.showwarning("Invalid priority",
+                                   "Priority must be 0 or higher.",
+                                   parent=self)
+            return
 
         updated = EventRule(
             name        = name,
@@ -1551,17 +1758,20 @@ class SummaryReportDialog(ctk.CTkToplevel):
     are written in plain English (i18n in v2.0 will replace them).
     """
 
-    def __init__(self, parent, stats: dict, op_word: str):
+    def __init__(self, parent, stats: dict, op_word: str,
+                 events: dict[str, int] | None = None):
         super().__init__(parent)
         self.title("Run Summary")
-        self.geometry("540x560")
+        # height adapts to whether we have an events section to show
+        h = 620 if events else 560
+        self.geometry(f"540x{h}")
         self.resizable(False, False)
         _apply_icon(self)
-        self._build(stats, op_word)
+        self._build(stats, op_word, events or {})
         _center_on_parent(self, parent)
         self.grab_set()
 
-    def _build(self, stats: dict, op_word: str):
+    def _build(self, stats: dict, op_word: str, events: dict[str, int]):
         self.grid_columnconfigure(0, weight=1)
 
         moved   = stats.get("moved", 0)
@@ -1617,20 +1827,68 @@ class SummaryReportDialog(ctk.CTkToplevel):
             r, c = divmod(i, 2)
             self._stat_card(body, r, c, icon, label, value, accent)
 
+        # ── Memory Mapper events section (only if any events matched) ──
+        next_row = 2
+        if events:
+            self._events_card(events, row=next_row)
+            next_row += 1
+
         # ── friendly closing line ──
         if total > 0 and errs == 0:
             tag = self._pick_friendly_tag(moved, dupes)
             ctk.CTkLabel(self, text=tag,
                          font=ctk.CTkFont(size=11),
                          text_color=("#7A4A10", "#C8A060")
-                         ).grid(row=2, column=0, padx=24, pady=(0, 8), sticky="w")
+                         ).grid(row=next_row, column=0, padx=24,
+                                pady=(0, 8), sticky="w")
+            next_row += 1
 
         # ── close button ──
         bb = ctk.CTkFrame(self, fg_color="transparent")
-        bb.grid(row=3, column=0, padx=24, pady=(4, 18), sticky="e")
+        bb.grid(row=next_row, column=0, padx=24, pady=(4, 18), sticky="e")
         ctk.CTkButton(bb, text="✓  Got it", width=120,
                       command=self.destroy
                       ).pack()
+
+    def _events_card(self, events: dict[str, int], row: int):
+        """Show matched Memory Mapper events. Compact list for ≤5 events;
+        otherwise show count + top 5 by file count."""
+        card = ctk.CTkFrame(self, fg_color=("#DDD0BE", "#2D2318"),
+                            corner_radius=8,
+                            border_width=1,
+                            border_color=("#C8A878", "#4A3820"))
+        card.grid(row=row, column=0, padx=24, pady=(0, 8), sticky="ew")
+
+        n = len(events)
+        head = (f"✨  {n} event{'s' if n != 1 else ''} captured"
+                + ("" if n <= 5 else f"  (showing top 5)"))
+        ctk.CTkLabel(card, text=head,
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color=("#7A4A10", "#E0A030")
+                     ).pack(padx=14, pady=(10, 6), anchor="w")
+
+        # sort by count desc, take top 5
+        items = sorted(events.items(), key=lambda kv: -kv[1])[:5]
+        for name, count in items:
+            ctk.CTkLabel(card,
+                         text=f"   • {name}   —   {count:,} file{'s' if count != 1 else ''}",
+                         font=ctk.CTkFont(size=11),
+                         text_color=("#3D2C14", "#E0D0B0"),
+                         anchor="w",
+                         ).pack(padx=14, pady=1, anchor="w", fill="x")
+
+        if n > 5:
+            ctk.CTkLabel(card,
+                         text=f"   … and {n - 5} more",
+                         font=ctk.CTkFont(size=10),
+                         text_color=("gray45", "gray55"),
+                         ).pack(padx=14, pady=(2, 0), anchor="w")
+
+        ctk.CTkFrame(card, height=8, fg_color="transparent").pack()
+
+        # bump the friendly-tag and close-button rows down to row 3 / 4
+        # since we just added a new row 2.
+        # (the grid uses absolute row indices below; this widget *is* row 2 now)
 
     def _stat_card(self, parent, r, c, icon, label, value, accent):
         f = ctk.CTkFrame(parent, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
@@ -2026,6 +2284,9 @@ class App(ctk.CTk):
         self._prog_target_current = 0.0
         self._pulse_phase = 0.0       # radians, advanced each tick when running
         self._pulse_active = False    # True while a run is in progress
+
+        # Memory Mapper run-time tally (v1.2): event_name → file count
+        self._event_counts: dict[str, int] = {}
 
         # apply saved theme
         ctk.set_appearance_mode(self._settings.get("theme", "dark"))
@@ -2696,11 +2957,16 @@ class App(ctk.CTk):
                             self._cnt_videos += 1
                         else:
                             self._cnt_photos += 1
+                        # tally Memory Mapper events for the summary report
+                        if evt.event_name:
+                            self._event_counts[evt.event_name] = (
+                                self._event_counts.get(evt.event_name, 0) + 1)
                         pfx = {"moved":"MOV","copied":"CPY","dry_run":"DRY"
                                }.get(evt.status, evt.status[:3].upper())
                         dest_rel = self._rel(evt.dest_path)
+                        evt_tag  = f"  [✨ {evt.event_name}]" if evt.event_name else ""
                         self._log("ok",
-                                  f"[{pfx}] {fname}  =>  {dest_rel}  ({evt.device})")
+                                  f"[{pfx}] {fname}  =>  {dest_rel}  ({evt.device}){evt_tag}")
                     elif evt.status == "duplicate":
                         self._cnt_dupes += 1
                         self._log("dupe", f"[DUP] {fname}  (duplicate quarantined)")
@@ -2754,8 +3020,9 @@ class App(ctk.CTk):
                     # visual summary report (only for real runs that processed files)
                     if s.get("total", 0) > 0 and not self._dry_run_var.get():
                         op_word = "Copied" if self._op_var.get() == "copy" else "Moved"
-                        self.after(300, lambda st=s, op=op_word:
-                                   SummaryReportDialog(self, st, op))
+                        events_snapshot = dict(self._event_counts)
+                        self.after(300, lambda st=s, op=op_word, ev=events_snapshot:
+                                   SummaryReportDialog(self, st, op, ev))
 
         except queue.Empty:
             pass
@@ -2831,6 +3098,7 @@ class App(ctk.CTk):
             v.set("—")
         self._cnt_photos = self._cnt_videos = self._cnt_dupes = 0
         self._cnt_errors = self._cnt_resumed = 0
+        self._event_counts.clear()
 
     @staticmethod
     def _rel(full_path: str) -> str:
