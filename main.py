@@ -9,7 +9,7 @@ import threading
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 import customtkinter as ctk
 
@@ -18,7 +18,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.2.0"
+APP_VERSION  = "1.3.0"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
@@ -1862,6 +1862,231 @@ class _ConfirmResetDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Dry-Run Preview Tree (shown after a dry run, v1.3) ──────────────────────
+
+class DryRunTreeDialog(ctk.CTkToplevel):
+    """Visualises the folder hierarchy a dry run would produce.
+
+    Built from the list of dest_paths the mover emitted during the dry run,
+    rendered as a collapsible ttk.Treeview tagged with file counts per
+    folder. Lets the user confirm the structure before committing to a
+    real run.
+
+    `paths` is a list of (kind, full_dest_path, event_name) tuples where
+    kind ∈ {"ok", "dup"}.
+    """
+
+    def __init__(self, parent, paths: list[tuple[str, str, str]],
+                 dest_root: str, op_word: str, on_run_real):
+        super().__init__(parent)
+        self.title("Dry-Run Preview")
+        self.geometry("780x640")
+        self.resizable(True, True)
+        self.minsize(620, 480)
+        _apply_icon(self)
+        self._paths        = paths
+        self._dest_root    = Path(dest_root) if dest_root else Path("")
+        self._op_word      = op_word
+        self._on_run_real  = on_run_real
+        self._build()
+        _center_on_parent(self, parent)
+        self.grab_set()
+
+    # ── build ─────────────────────────────────────────────────────────────────
+
+    def _build(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+
+        # Header
+        hdr = ctk.CTkFrame(self, corner_radius=0, fg_color=("#B07020", "#2D2318"))
+        hdr.grid(row=0, column=0, sticky="ew")
+        ctk.CTkLabel(hdr, text="🌳  Dry-Run Preview",
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color=("#FFFFFF", "#F0D090")
+                     ).pack(padx=20, pady=(14, 2), anchor="w")
+        ctk.CTkLabel(hdr,
+                     text="This is the folder structure that would be created "
+                          "if you ran for real. Review, then confirm.",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("#F0D090", "#9A8060"),
+                     wraplength=720, justify="left",
+                     ).pack(padx=20, pady=(0, 14), anchor="w")
+
+        # Summary band — quick totals above the tree
+        nodes = self._build_tree_data()
+        total_files = sum(c for c, _evt in nodes.values() if c)
+        n_folders   = sum(1 for c, _evt in nodes.values() if c)
+        events_seen = {evt for _c, evt in nodes.values() if evt}
+
+        info = ctk.CTkFrame(self, fg_color=("#DDD0BE", "#2D2318"), corner_radius=8)
+        info.grid(row=1, column=0, sticky="ew", padx=18, pady=(12, 8))
+        info_text = (f"📁  {n_folders} folders   ·   📦  {total_files:,} files"
+                     + (f"   ·   ✨ {len(events_seen)} event"
+                        f"{'s' if len(events_seen) != 1 else ''}"
+                        if events_seen else ""))
+        ctk.CTkLabel(info, text=info_text,
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color=("#5A3A10", "#F0D090")
+                     ).pack(padx=14, pady=10, anchor="w")
+        ctk.CTkLabel(info, text=f"Destination:  {self._dest_root}",
+                     font=ctk.CTkFont(size=10),
+                     text_color=("gray45", "gray60"),
+                     ).pack(padx=14, pady=(0, 10), anchor="w")
+
+        # Tree view (ttk — themed manually to match the dialog)
+        tree_outer = ctk.CTkFrame(self, fg_color=("#DDD0BE", "#2D2318"),
+                                  corner_radius=8)
+        tree_outer.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 12))
+        tree_outer.grid_columnconfigure(0, weight=1)
+        tree_outer.grid_rowconfigure(0, weight=1)
+
+        self._theme_tree_style()
+        self._tree = ttk.Treeview(tree_outer, show="tree", style="Nest.Treeview",
+                                  selectmode="browse")
+        self._tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+        sb = ctk.CTkScrollbar(tree_outer, command=self._tree.yview)
+        sb.grid(row=0, column=1, sticky="ns", padx=(0, 8), pady=8)
+        self._tree.configure(yscrollcommand=sb.set)
+
+        # tag styling for events / duplicates
+        self._tree.tag_configure("event", foreground="#F0C040")
+        self._tree.tag_configure("dup",   foreground="#C8882A")
+        self._tree.tag_configure("count", foreground="#9A8060")
+
+        self._populate_tree(nodes)
+        # auto-expand the first level so users see the layout immediately
+        for top_id in self._tree.get_children(""):
+            self._tree.item(top_id, open=True)
+
+        # Bottom bar
+        bottom = ctk.CTkFrame(self, corner_radius=0,
+                              fg_color=("#D8CDB8", "#231C14"))
+        bottom.grid(row=3, column=0, sticky="ew")
+        bottom.grid_columnconfigure(0, weight=1)
+        bar = ctk.CTkFrame(bottom, fg_color="transparent")
+        bar.grid(row=0, column=0, padx=20, pady=14, sticky="e")
+
+        ctk.CTkButton(bar, text="Close", width=110,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(bar, text=f"▶  Run {self._op_word} for real",
+                      width=210,
+                      command=self._confirm_run
+                      ).pack(side="left")
+
+    def _theme_tree_style(self):
+        """Style ttk.Treeview to match the warm-nest palette.
+
+        ttk widgets aren't part of CTk's theming system, so we apply a
+        named style explicitly. Falls back silently if ttk is absent.
+        """
+        try:
+            from tkinter import ttk
+            dark = ctk.get_appearance_mode().lower() == "dark"
+            bg     = "#231C14" if dark else "#EDE5D5"
+            fg     = "#F0E0C0" if dark else "#2D1C08"
+            sel_bg = "#C8882A"
+            sel_fg = "#FFFFFF"
+            style = ttk.Style()
+            try:
+                style.theme_use("clam")
+            except Exception:
+                pass
+            style.configure("Nest.Treeview",
+                            background=bg, foreground=fg, fieldbackground=bg,
+                            borderwidth=0, rowheight=22,
+                            font=("Segoe UI", 10))
+            style.map("Nest.Treeview",
+                      background=[("selected", sel_bg)],
+                      foreground=[("selected", sel_fg)])
+        except Exception:
+            pass
+
+    # ── tree building ─────────────────────────────────────────────────────────
+
+    def _build_tree_data(self) -> dict[str, tuple[int, str]]:
+        """Aggregate paths into  rel_dir → (file_count, event_name).
+
+        The directory portion of each dest_path becomes a node; same dir
+        across multiple files just bumps the count. event_name is preserved
+        if every file in that folder shares the same event tag (typical for
+        Memory Mapper folders).
+        """
+        nodes: dict[str, tuple[int, str]] = {}
+        root_str = str(self._dest_root)
+        for kind, full_path, evt_name in self._paths:
+            try:
+                rel = str(Path(full_path).parent.relative_to(self._dest_root))
+            except ValueError:
+                rel = str(Path(full_path).parent)
+            tag = "event" if evt_name else ("dup" if kind == "dup" else "")
+            existing_count, existing_evt = nodes.get(rel, (0, ""))
+            # if events disagree across files in the same folder, drop the tag
+            new_evt = (existing_evt if existing_evt == evt_name
+                       else (evt_name if not existing_evt else ""))
+            nodes[rel] = (existing_count + 1, new_evt)
+            # also create empty parent nodes so the tree shows the chain
+            parts = Path(rel).parts
+            for i in range(1, len(parts)):
+                p = str(Path(*parts[:i]))
+                nodes.setdefault(p, (0, ""))
+        return nodes
+
+    def _populate_tree(self, nodes: dict[str, tuple[int, str]]):
+        """Insert nodes into ttk.Treeview, sorted alphabetically per level."""
+        # Build a parent → [child rel_dir] map for ordered insertion
+        children: dict[str, list[str]] = {"": []}
+        for rel in nodes:
+            parts = Path(rel).parts
+            parent = str(Path(*parts[:-1])) if len(parts) > 1 else ""
+            children.setdefault(parent, []).append(rel)
+            children.setdefault(rel, [])
+        for parent, kids in children.items():
+            children[parent] = sorted(kids, key=str.lower)
+
+        # Map rel_dir → tree iid (str). Use the rel path itself as iid.
+        def insert(parent_iid: str, parent_rel: str):
+            for rel in children.get(parent_rel, []):
+                if rel == parent_rel:
+                    continue
+                count, evt_name = nodes[rel]
+                folder = Path(rel).name or rel
+                # Build display text:  📁 Folder Name  (47 files)
+                count_str = (f"   ({count:,} file{'s' if count != 1 else ''})"
+                             if count else "")
+                evt_str = f"   ✨ {evt_name}" if evt_name else ""
+                text = f"📁  {folder}{count_str}{evt_str}"
+                tag = "event" if evt_name else ""
+                # Top-level Duplicates folder gets the dup colour
+                if parent_rel == "" and folder.lower() == "duplicates":
+                    tag = "dup"
+                self._tree.insert(parent_iid, "end", iid=rel, text=text,
+                                  tags=(tag,) if tag else ())
+                insert(rel, rel)
+
+        insert("", "")
+
+    # ── confirm and run ───────────────────────────────────────────────────────
+
+    def _confirm_run(self):
+        ok = messagebox.askyesno(
+            f"Confirm {self._op_word.lower()}",
+            "Run for real now?\n\n"
+            f"Files will be {self._op_word.lower()}d into the folders shown\n"
+            "in the tree above. This is the same as unticking Dry Run\n"
+            "and pressing Start.",
+            parent=self)
+        if not ok:
+            return
+        self.destroy()
+        # parent App will toggle dry_run off and trigger _start()
+        self._on_run_real()
+
+
 # ── Visual Summary Report (shown after run completes) ────────────────────────
 
 class SummaryReportDialog(ctk.CTkToplevel):
@@ -2401,6 +2626,11 @@ class App(ctk.CTk):
         # Memory Mapper run-time tally (v1.2): event_name → file count
         self._event_counts: dict[str, int] = {}
 
+        # Dry-run preview tree (v1.3): collect (status, dest_path, event)
+        # tuples while a dry run executes, so we can show the user the full
+        # tree they would get if they ran for real.
+        self._dry_run_paths: list[tuple[str, str, str]] = []
+
         # apply saved theme
         ctk.set_appearance_mode(self._settings.get("theme", "dark"))
         ctk.set_default_color_theme(str(BASE_DIR / "assets" / "nest_theme.json"))
@@ -2564,9 +2794,18 @@ class App(ctk.CTk):
         left.grid_columnconfigure(0, weight=1)
 
         # Source folders
-        ctk.CTkLabel(left, text="Source Folders",
+        # Source Folders header — title on left, live count on right
+        src_hdr = ctk.CTkFrame(left, fg_color="transparent")
+        src_hdr.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="ew")
+        src_hdr.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(src_hdr, text="Source Folders",
                      font=ctk.CTkFont(size=13, weight="bold")
-                     ).grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
+                     ).grid(row=0, column=0, sticky="w")
+        # live media-file count (updated async after add/remove)
+        self._src_count_lbl = ctk.CTkLabel(src_hdr, text="",
+                                           font=ctk.CTkFont(size=10),
+                                           text_color=("#7A4A10", "#C8A060"))
+        self._src_count_lbl.grid(row=0, column=1, sticky="e")
 
         src_frame = ctk.CTkFrame(left, fg_color="transparent")
         src_frame.grid(row=1, column=0, padx=12, sticky="ew")
@@ -2825,6 +3064,9 @@ class App(ctk.CTk):
                            ("event","#F0C040")]:   # Memory Mapper matches → bright gold
             self._log_text.tag_configure(tag, foreground=color)
 
+        # Right-click context menu (v1.3)
+        self._log_text.bind("<Button-3>", self._on_log_right_click)
+
         # Progress bars
         prog = ctk.CTkFrame(right, fg_color="transparent")
         prog.grid(row=2, column=0, padx=12, pady=(4, 12), sticky="ew")
@@ -2860,6 +3102,7 @@ class App(ctk.CTk):
             if str(p) not in self._src_listbox.get(0, "end"):
                 self._src_listbox.insert("end", str(p))
                 self._source_paths.append(p)
+                self._refresh_source_count()
 
     def _remove_source(self):
         sel = self._src_listbox.curselection()
@@ -2867,6 +3110,52 @@ class App(ctk.CTk):
             idx = sel[0]
             self._src_listbox.delete(idx)
             self._source_paths.pop(idx)
+            self._refresh_source_count()
+
+    # ── source-count preview (v1.3) ───────────────────────────────────────────
+
+    def _refresh_source_count(self):
+        """Async-count media files across the current source list.
+
+        Uses a generation token so a slow scan from an earlier source set
+        can't overwrite a newer count if the user has already changed the
+        list again.
+        """
+        if not self._source_paths:
+            self._src_count_lbl.configure(text="")
+            return
+        # bump generation; only the latest scan's result is honoured
+        self._src_count_gen = getattr(self, "_src_count_gen", 0) + 1
+        gen = self._src_count_gen
+        self._src_count_lbl.configure(text="counting…",
+                                      text_color=("gray45", "gray60"))
+
+        sources = list(self._source_paths)
+        config  = self._config
+        dest    = (Path(self._dest_var.get())
+                   if self._dest_var.get() else None)
+
+        def _count_worker():
+            from core.scanner import scan
+            try:
+                n = sum(1 for _ in scan(sources, config, dest))
+            except Exception:
+                n = -1
+            # marshal back to UI thread
+            self.after(0, lambda: self._on_count_done(gen, n))
+
+        threading.Thread(target=_count_worker, daemon=True).start()
+
+    def _on_count_done(self, gen: int, n: int):
+        if gen != getattr(self, "_src_count_gen", 0):
+            return   # stale result — ignore
+        if n < 0:
+            self._src_count_lbl.configure(
+                text="(error)", text_color="#D45030")
+        else:
+            self._src_count_lbl.configure(
+                text=f"≈ {n:,} media files",
+                text_color=("#7A4A10", "#C8A060"))
 
     def _browse_dest(self):
         path = filedialog.askdirectory(title="Select Destination Folder")
@@ -2919,6 +3208,16 @@ class App(ctk.CTk):
     def _safe_stop(self):
         if self._btn_stop.cget("state") == "normal":
             self._stop()
+
+    def _run_after_preview(self):
+        """Called from DryRunTreeDialog 'Run for real' button.
+
+        Toggles Dry Run off, then triggers Start. The user already saw
+        the structure so the standard confirm dialog is still shown but
+        feels like a natural next step rather than a surprise.
+        """
+        self._dry_run_var.set(False)
+        self._start()
 
     def _apply_new_settings(self, new_settings: dict):
         old_theme = self._settings.get("theme")
@@ -3075,6 +3374,10 @@ class App(ctk.CTk):
                         if evt.event_name:
                             self._event_counts[evt.event_name] = (
                                 self._event_counts.get(evt.event_name, 0) + 1)
+                        # collect dest paths during dry run for the preview tree
+                        if evt.status == "dry_run" and evt.dest_path:
+                            self._dry_run_paths.append(
+                                ("ok", evt.dest_path, evt.event_name or ""))
                         pfx = {"moved":"MOV","copied":"CPY","dry_run":"DRY"
                                }.get(evt.status, evt.status[:3].upper())
                         dest_rel = self._rel(evt.dest_path)
@@ -3090,6 +3393,10 @@ class App(ctk.CTk):
                     elif evt.status == "duplicate":
                         self._cnt_dupes += 1
                         self._log("dupe", f"[DUP] {fname}  (duplicate quarantined)")
+                        # collect for dry-run preview tree (Duplicates/ branch)
+                        if self._dry_run_var.get() and evt.dest_path:
+                            self._dry_run_paths.append(
+                                ("dup", evt.dest_path, ""))
                     elif evt.status == "error":
                         self._cnt_errors += 1
                         self._log("error", f"[ERR] {fname}  {evt.error_msg}")
@@ -3143,6 +3450,16 @@ class App(ctk.CTk):
                         events_snapshot = dict(self._event_counts)
                         self.after(300, lambda st=s, op=op_word, ev=events_snapshot:
                                    SummaryReportDialog(self, st, op, ev))
+
+                    # dry-run preview tree (only when dry-run produced paths)
+                    if self._dry_run_var.get() and self._dry_run_paths:
+                        paths_snapshot = list(self._dry_run_paths)
+                        dest_root = self._dest_var.get()
+                        op_word = "Copy" if self._op_var.get() == "copy" else "Move"
+                        self.after(300, lambda p=paths_snapshot,
+                                                  dr=dest_root, op=op_word:
+                                   DryRunTreeDialog(self, p, dr, op,
+                                                    on_run_real=self._run_after_preview))
 
         except queue.Empty:
             pass
@@ -3203,6 +3520,95 @@ class App(ctk.CTk):
         self._log_text.delete("1.0", "end")
         self._log_text.configure(state="disabled")
 
+    # ── log context menu (v1.3) ───────────────────────────────────────────────
+
+    def _on_log_right_click(self, event):
+        """Pop up a small context menu over the right-clicked log line.
+
+        Offers:  Copy line · Reveal in Explorer · Open destination folder
+        The "Reveal" option is only enabled when the log line contains a
+        " => <path>" segment we can resolve.
+        """
+        idx = self._log_text.index(f"@{event.x},{event.y}")
+        line = self._log_text.get(f"{idx} linestart", f"{idx} lineend")
+
+        # try to extract the destination path from the line
+        target_path = self._parse_log_dest(line)
+
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Copy line",
+                         command=lambda: self._copy_text(line))
+        if target_path is not None:
+            menu.add_command(label="Reveal in Explorer",
+                             command=lambda p=target_path: self._open_in_explorer(p, reveal=True))
+        if self._dest_var.get():
+            menu.add_command(label="Open destination folder",
+                             command=lambda: self._open_in_explorer(
+                                 Path(self._dest_var.get()), reveal=False))
+
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _parse_log_dest(self, line: str) -> Path | None:
+        """Best-effort parse of '... => <rel-path>  (device)' to a real Path.
+
+        Log lines truncate the path to last 4 components for readability;
+        we re-attach to the destination root and walk back if missing.
+        """
+        if " => " not in line:
+            return None
+        dest_root = self._dest_var.get().strip()
+        if not dest_root:
+            return None
+        # everything after " => " up to the device "(...)" tag at the end
+        rhs = line.split(" => ", 1)[1]
+        rel = rhs.split("  (", 1)[0].strip()
+        # remove an optional trailing "[event …]" tag
+        if "  [" in rel:
+            rel = rel.split("  [", 1)[0].strip()
+        if not rel:
+            return None
+        # try the obvious first: dest_root + rel (works when full path was preserved)
+        candidate = Path(dest_root) / rel
+        if candidate.exists():
+            return candidate
+        # otherwise return its parent if the parent exists (folder reveal)
+        if candidate.parent.exists():
+            return candidate.parent
+        return None
+
+    @staticmethod
+    def _copy_text(text: str):
+        try:
+            import pyperclip
+            pyperclip.copy(text.rstrip("\n"))
+        except Exception:
+            # Fallback: use tk clipboard (works without third-party libs)
+            try:
+                root = tk._default_root
+                if root is not None:
+                    root.clipboard_clear()
+                    root.clipboard_append(text.rstrip("\n"))
+            except Exception:
+                pass
+
+    @staticmethod
+    def _open_in_explorer(path: Path, *, reveal: bool):
+        """Open Windows Explorer at *path*. If reveal=True and path is a
+        file, the file is selected; if it's a directory, just open it."""
+        import subprocess
+        try:
+            p = path.resolve()
+            if reveal and p.is_file():
+                subprocess.Popen(["explorer", "/select,", str(p)])
+            else:
+                target = p if p.is_dir() else p.parent
+                subprocess.Popen(["explorer", str(target)])
+        except Exception:
+            pass
+
     def _reset_ui(self):
         self._clear_log()
         self._prog_overall.set(0)
@@ -3219,6 +3625,7 @@ class App(ctk.CTk):
         self._cnt_photos = self._cnt_videos = self._cnt_dupes = 0
         self._cnt_errors = self._cnt_resumed = 0
         self._event_counts.clear()
+        self._dry_run_paths.clear()
 
     @staticmethod
     def _rel(full_path: str) -> str:
