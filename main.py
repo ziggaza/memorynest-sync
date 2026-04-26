@@ -18,7 +18,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.3.1"
+APP_VERSION  = "1.3.2"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
@@ -1265,7 +1265,10 @@ class MemoryMapperDialog(ctk.CTkToplevel):
                                      font=ctk.CTkFont(size=10),
                                      text_color=("#3A7A3A", "#9ACC80"))
         self._ed_info.pack(padx=24, pady=(0, 4), anchor="w")
-        self._on_ed_date_change()
+        # NOTE: don't call _on_ed_date_change here — it triggers
+        # _auto_fill_folder which depends on self._ed_folder, which
+        # is constructed below. We call it at the end of _render_editor
+        # once every widget exists.
 
         # ── folder name ──
         ctk.CTkLabel(body, text="Folder name",
@@ -1366,6 +1369,9 @@ class MemoryMapperDialog(ctk.CTkToplevel):
                         font=ctk.CTkFont(size=12, weight="bold"),
                         ).pack(padx=20, pady=(8, 18), anchor="w")
 
+        # All widgets exist now — safe to run validation + auto-fill
+        self._on_ed_date_change()
+
     def _render_editor_bottom(self):
         bar = ctk.CTkFrame(self._bottom, fg_color="transparent")
         bar.grid(row=0, column=0, padx=20, pady=14, sticky="ew")
@@ -1445,7 +1451,14 @@ class MemoryMapperDialog(ctk.CTkToplevel):
         Uses the YYYYMMDD start date as a sortable prefix:
             "20250617 HBD Party OOM 2025"
         Skips if the user has typed in the folder field manually.
+
+        Defensive: returns early if any of the editor's StringVars don't
+        exist yet (e.g. trace fired during _render_editor before the
+        folder entry was constructed).
         """
+        if not all(hasattr(self, attr) for attr in
+                   ("_ed_folder", "_ed_name", "_ed_start")):
+            return
         if getattr(self, "_ed_folder_dirty", False):
             return
         name = self._ed_name.get().strip()
