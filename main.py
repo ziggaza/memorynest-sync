@@ -21,7 +21,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.3.3"
+APP_VERSION  = "1.3.4"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 #
