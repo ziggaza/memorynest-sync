@@ -624,9 +624,11 @@ class CategoryManagerDialog(ctk.CTkToplevel):
         # Delete category
         del_row = ctk.CTkFrame(right, fg_color="transparent")
         del_row.grid(row=6, column=0, columnspan=2, padx=12, pady=(2,12), sticky="ew")
-        self._del_btn = ctk.CTkButton(del_row, text="Delete Category",
+        self._del_btn = ctk.CTkButton(del_row, text="🗑  Delete Category",
                                        fg_color="#B83828", hover_color="#8C2A1E",
-                                       height=28, width=150,
+                                       text_color="#FFFFFF",
+                                       text_color_disabled="#C0A0A0",
+                                       height=28, width=170,
                                        command=self._delete_category)
         self._del_btn.pack(side="left")
         self._built_in_lbl = ctk.CTkLabel(del_row, text="",
