@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from core.event_rules import load_rules, find_match
+
 MONTH_NAMES = [
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
@@ -59,6 +61,10 @@ class PathBuilder:
         if "Videos" not in self._cat_folders:
             self._cat_folders["Videos"] = s.get("video_root_name", "Videos")
 
+        # event rules ("Memory Mapper") — checked before normal segments
+        self._event_rules = load_rules(config)
+        self._events_root = s.get("events_root_name", "Events")
+
     # ── public ────────────────────────────────────────────────────────────────
 
     def build(
@@ -68,13 +74,31 @@ class PathBuilder:
         device_name: str,
         date: Optional[datetime],
         filename: str,
-    ) -> Path:
+    ) -> tuple[Path, Optional[str]]:
+        """Build the destination path for a file.
+
+        Returns (path, matched_event_name).  The event name is the
+        ``EventRule.name`` of the rule that matched, or None if the file
+        was routed via the default segment hierarchy.  The caller can use
+        the name for reporting in the Run Summary.
+        """
+        # Memory Mapper: if any user-defined event rule matches, route the
+        # file into {dest_root}/{events_root}/{event.folder_name}/{filename}
+        # — overriding the normal segment-based path.
+        if self._event_rules:
+            match = find_match(self._event_rules, date,
+                               device=device_name, category=media_type)
+            if match is not None:
+                p = dest_root / self._events_root / match.folder_name / filename
+                return p, match.name
+
+        # Default segment-based path
         path = dest_root
         for token in self._segments:
             part = self._render(token, media_type, device_name, date)
             if part:
                 path = path / part
-        return path / filename
+        return path / filename, None
 
     def build_duplicate(self, dest_root: Path, filename: str) -> Path:
         return dest_root / self._dup_folder / filename
@@ -159,6 +183,6 @@ class PathBuilder:
                 date: Optional[datetime] = None, filename: str = "IMG_001.JPG") -> str:
         if date is None:
             date = datetime(2024, 6, 15)
-        dest = self.build(Path(""), media_type, device, date, filename)
+        dest, _evt = self.build(Path(""), media_type, device, date, filename)
         # strip the leading empty-path separator
         return str(dest).lstrip("\\/")
