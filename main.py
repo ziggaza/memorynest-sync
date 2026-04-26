@@ -136,39 +136,51 @@ def _apply_icon(window: ctk.CTkToplevel) -> None:
 # ── Device Manager dialog ──────────────────────────────────────────────────────
 
 class DeviceManagerDialog(ctk.CTkToplevel):
+    """Manage EXIF key → folder-name mappings.
+
+    Each row is a self-contained CTkFrame so deletion is a single
+    `frame.destroy()` — no row-index tracking, no re-grid bookkeeping.
+    """
+
     def __init__(self, parent, config: dict, on_save):
         super().__init__(parent)
         self.title("Device Manager")
-        self.geometry("820x560")
+        self.geometry("860x580")
         self.resizable(True, True)
+        self.minsize(720, 460)
         _apply_icon(self)
         self._config  = config
         self._on_save = on_save
-        # rows: (key_entry, val_entry, is_auto_label)
-        self._rows: list[tuple[ctk.CTkEntry, ctk.CTkEntry]] = []
+        # row tuples: (row_frame, k_entry, v_entry)
+        self._rows: list[tuple[ctk.CTkFrame, ctk.CTkEntry, ctk.CTkEntry]] = []
         self._build()
         _center_on_parent(self, parent)
         self.grab_set()
+
+    # ── build ─────────────────────────────────────────────────────────────────
 
     def _build(self):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # header
+        # header (column titles)
         hdr = ctk.CTkFrame(self, fg_color="transparent")
         hdr.grid(row=0, column=0, padx=16, pady=(12, 0), sticky="ew")
+        hdr.grid_columnconfigure(0, weight=1)
         hdr.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(hdr, text="EXIF Key  (Make|Model)",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     width=300, anchor="w").grid(row=0, column=0, sticky="w")
+                     anchor="w").grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(hdr, text="Folder Name",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      anchor="w").grid(row=0, column=1, sticky="w", padx=(8, 0))
         ctk.CTkLabel(hdr, text="Source",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     width=80, anchor="w").grid(row=0, column=2, sticky="w", padx=(8, 0))
+                     width=70, anchor="w").grid(row=0, column=2, sticky="w", padx=(8, 0))
+        ctk.CTkLabel(hdr, text="",
+                     width=36).grid(row=0, column=3, padx=(4, 0))   # delete-btn column
 
-        # note
+        # auto-detected note (only shown when relevant)
         auto_keys = set(self._config.get("auto_detected_keys", []))
         if auto_keys:
             ctk.CTkLabel(self,
@@ -181,61 +193,110 @@ class DeviceManagerDialog(ctk.CTkToplevel):
         self._scroll = ctk.CTkScrollableFrame(self)
         self._scroll.grid(row=1, column=0, padx=16, pady=4, sticky="nsew")
         self._scroll.grid_columnconfigure(0, weight=1)
-        self._scroll.grid_columnconfigure(1, weight=1)
 
         mappings = self._config.get("device_mappings", {})
-        for i, (key, val) in enumerate(mappings.items()):
-            self._add_row(key, val, i, is_auto=(key in auto_keys))
+        for key, val in mappings.items():
+            self._add_row(key, val, is_auto=(key in auto_keys))
 
-        # buttons
+        # bottom action bar
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.grid(row=2, column=0, padx=16, pady=(0, 12), sticky="ew")
+        bar.grid_columnconfigure(2, weight=1)
+
         ctk.CTkButton(bar, text="+ Add Row", width=110,
-                      command=self._add_empty_row).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(bar, text="Save", width=110,
-                      command=self._save).pack(side="right")
+                      command=self._add_empty_row
+                      ).grid(row=0, column=0, padx=(0, 8))
+        ctk.CTkButton(bar, text="🧹  Clear All", width=120,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color="#B83828",
+                      command=self._clear_all
+                      ).grid(row=0, column=1, padx=(0, 8))
+
         ctk.CTkButton(bar, text="Cancel", width=110,
-                      fg_color=("#7A5535", "#3D3020"), hover_color=("#9A7050", "#4D4028"),
-                      command=self.destroy).pack(side="right", padx=(0, 8))
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color=("#9A7050", "#4D4028"),
+                      command=self.destroy
+                      ).grid(row=0, column=3, padx=(0, 8))
+        ctk.CTkButton(bar, text="💾  Save", width=110,
+                      command=self._save
+                      ).grid(row=0, column=4)
 
-    def _add_row(self, key="", val="", row=None, is_auto=False):
-        if row is None:
-            row = len(self._rows)
-        fg = "#C8882A" if is_auto else ctk.ThemeManager.theme["CTkEntry"]["border_color"][1]
+    # ── row management ────────────────────────────────────────────────────────
 
-        k_entry = ctk.CTkEntry(self._scroll, placeholder_text="Make|Model",
-                               border_color=fg if is_auto else None)
-        k_entry.grid(row=row, column=0, padx=(0, 6), pady=3, sticky="ew")
+    def _add_row(self, key="", val="", is_auto=False):
+        """Create one row inside its own CTkFrame so deletion is isolated."""
+        fg = "#C8882A" if is_auto else None
+
+        rf = ctk.CTkFrame(self._scroll, fg_color="transparent")
+        rf.pack(fill="x", pady=2)
+        rf.grid_columnconfigure(0, weight=1)
+        rf.grid_columnconfigure(1, weight=1)
+
+        k_entry = ctk.CTkEntry(rf, placeholder_text="Make|Model",
+                               border_color=fg)
+        k_entry.grid(row=0, column=0, padx=(0, 6), sticky="ew")
         k_entry.insert(0, key)
 
-        v_entry = ctk.CTkEntry(self._scroll, placeholder_text="Folder Name",
-                               border_color=fg if is_auto else None)
-        v_entry.grid(row=row, column=1, padx=(0, 6), pady=3, sticky="ew")
+        v_entry = ctk.CTkEntry(rf, placeholder_text="Folder Name",
+                               border_color=fg)
+        v_entry.grid(row=0, column=1, padx=(0, 6), sticky="ew")
         v_entry.insert(0, val)
 
-        src_lbl = ctk.CTkLabel(self._scroll,
-                               text="auto" if is_auto else "defined",
-                               text_color="#C8882A" if is_auto else ("gray50", "#9A8060"),
-                               font=ctk.CTkFont(size=10), width=60, anchor="w")
-        src_lbl.grid(row=row, column=2, pady=3, sticky="w")
+        ctk.CTkLabel(rf,
+                     text="auto" if is_auto else "defined",
+                     text_color="#C8882A" if is_auto else ("gray50", "#9A8060"),
+                     font=ctk.CTkFont(size=10), width=70, anchor="w"
+                     ).grid(row=0, column=2, sticky="w")
 
-        self._rows.append((k_entry, v_entry))
+        ctk.CTkButton(rf, text="🗑", width=32, height=28,
+                      fg_color=("#7A5535", "#3D3020"),
+                      hover_color="#B83828",
+                      text_color="#FFFFFF",
+                      font=ctk.CTkFont(size=12),
+                      command=lambda f=rf: self._delete_row(f)
+                      ).grid(row=0, column=3, padx=(4, 0))
+
+        self._rows.append((rf, k_entry, v_entry))
 
     def _add_empty_row(self):
         self._add_row()
 
+    def _delete_row(self, row_frame: ctk.CTkFrame):
+        """Delete a single row. No confirmation — Save discards changes."""
+        row_frame.destroy()
+        self._rows = [r for r in self._rows if r[0] is not row_frame]
+
+    def _clear_all(self):
+        if not self._rows:
+            return
+        ok = messagebox.askyesno(
+            "Clear all device mappings",
+            f"Remove all {len(self._rows)} device mapping(s)?\n\n"
+            "Tip: After clearing, the next Run will automatically re-detect\n"
+            "every device from your source files in the amber 'auto' state.\n\n"
+            "Existing organized folders on disk are NOT affected.",
+            parent=self)
+        if not ok:
+            return
+        for rf, _k, _v in self._rows:
+            rf.destroy()
+        self._rows.clear()
+
+    # ── save ──────────────────────────────────────────────────────────────────
+
     def _save(self):
         new_mappings, saved_keys = {}, set()
-        for k_e, v_e in self._rows:
+        for _rf, k_e, v_e in self._rows:
             k, v = k_e.get().strip(), v_e.get().strip()
             if k and v:
                 new_mappings[k] = v
                 saved_keys.add(k)
-        # remove auto_detected_keys that now have a proper name
+        # Keep auto-detected status only for keys still present AND still
+        # holding their raw value (i.e. user hasn't given a real folder name yet)
         auto_keys = set(self._config.get("auto_detected_keys", []))
-        remaining_auto = [k for k in auto_keys if k in saved_keys and
-                          new_mappings.get(k) == k]   # still has raw key as value
-        self._config["device_mappings"]   = new_mappings
+        remaining_auto = [k for k in auto_keys
+                          if k in saved_keys and new_mappings.get(k) == k]
+        self._config["device_mappings"]    = new_mappings
         self._config["auto_detected_keys"] = remaining_auto
         save_config(self._config)
         self._on_save(self._config)
