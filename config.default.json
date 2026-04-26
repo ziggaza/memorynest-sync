@@ -180,18 +180,15 @@
     "SAMSUNG|GT-N7100": "SAMSUNG GT-N7100",
     "SAMSUNG|SM-N900": "SAMSUNG SM-N900",
     "Canon|Canon PowerShot G12": "Canon Canon PowerShot G12",
-    "SK communications|Cymera": "SK communications Cymera",
     "SONY|ILCE-7": "SONY ILCE-7",
     "samsung|GT-N7100": "samsung GT-N7100",
     "Panasonic|DMC-GF3": "Panasonic DMC-GF3",
     "SONY|DSC-T50": "SONY DSC-T50",
-    "http://photogrid.org|": "http___photogrid.org None",
     "Canon|Canon IXY DIGITAL 900 IS": "Canon Canon IXY DIGITAL 900 IS",
     "FUJIFILM|FinePix J210": "FUJIFILM FinePix J210",
     "NIKON|COOLPIX S3": "NIKON COOLPIX S3",
     "Phase One|H 25": "Phase One H 25",
     "Phase One|P45+": "Phase One P45+",
-    "Layout from Instagram|": "Layout from Instagram None",
     "samsung|Galaxy S23 Ultra": "samsung Galaxy S23 Ultra",
     "Apple|iPad mini": "Apple iPad mini"
   },
@@ -282,30 +279,20 @@
     "fallback_strategy": "use_file_date",
     "conflict_suffix_separator": "_",
     "duplicate_folder_name": "Duplicates",
-    "unreadable_folder_name": "Unreadable"
+    "unreadable_folder_name": "Unreadable",
+    "events_root_name": "Events"
   },
   "auto_detected_keys": [],
   "folder_structure": {
     "segments": [
-      "year",
       "category",
       "device",
-      "year_month"
+      "year",
+      "month"
     ],
     "month_format": "MM_MonthName",
     "year_month_format": "YYYY-MM",
     "day_format": "YYYYMMDD"
   },
-  "event_rules": [
-    {
-      "name": "Play at New Home",
-      "start": "2023-04-01T00:00:00",
-      "end": "2023-04-30T23:59:00",
-      "folder_name": "Play at New Home - Test Event",
-      "devices": [],
-      "categories": [],
-      "priority": 10,
-      "enabled": true
-    }
-  ]
+  "event_rules": []
 }

@@ -73,7 +73,7 @@ pyinstaller ^
     --windowed ^
     --name "MemoryNest Sync" ^
     --icon "assets\icon.ico" ^
-    --add-data "config.json;." ^
+    --add-data "config.default.json;." ^
     --add-data "core;core" ^
     --add-data "assets;assets" ^
     --hidden-import "customtkinter" ^
