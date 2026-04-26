@@ -18,7 +18,7 @@ from core.mover import Organizer, OrganizerEvent, EventKind
 from core.path_builder import PathBuilder, DEFAULT_SEGMENTS, MONTH_NAMES
 from core.sound import SoundEngine, THEMES as SOUND_THEMES
 
-APP_VERSION  = "1.2.0"
+APP_VERSION  = "1.3.0"
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR     = Path(__file__).parent
