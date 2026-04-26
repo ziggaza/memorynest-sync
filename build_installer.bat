@@ -103,18 +103,72 @@ if errorlevel 1 (
     echo [WARN] Could not auto-update installer.iss. Edit AppVersion manually.
 )
 
+REM -- Try to auto-compile the installer with Inno Setup if it is available --
+REM ISCC.exe is the command-line compiler installed alongside Inno Setup 6.
+REM We probe a few common install paths AND PATH; if found we run it
+REM automatically so the user gets a setup.exe in one click.
+echo.
+echo Looking for Inno Setup Compiler (ISCC.exe) ...
+set "ISCC="
+for %%P in (
+    "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+    "%ProgramFiles%\Inno Setup 6\ISCC.exe"
+    "%ProgramFiles(x86)%\Inno Setup 5\ISCC.exe"
+    "%ProgramFiles%\Inno Setup 5\ISCC.exe"
+) do (
+    if exist %%P set "ISCC=%%~P"
+)
+if "%ISCC%"=="" (
+    where ISCC.exe >nul 2>nul && for /f "delims=" %%p in ('where ISCC.exe') do set "ISCC=%%p"
+)
+
+if "%ISCC%"=="" (
+    echo.
+    echo ====================================================
+    echo  Build SUCCESS  -  v%APP_VERSION%   ^(stage 1 of 2^)
+    echo ====================================================
+    echo.
+    echo  PyInstaller output : dist\MemoryNest Sync\
+    echo  Installer template : installer.iss   ^(synced to v%APP_VERSION%^)
+    echo.
+    echo  Inno Setup Compiler not found.
+    echo  Install it from  https://jrsoftware.org/isdl.php  to enable
+    echo  auto-compilation, OR open installer.iss manually and press F9.
+    echo.
+    echo  Final output will be:
+    echo    installer_output\MemoryNestSync_Setup_v%APP_VERSION%.exe
+    echo.
+    pause
+    endlocal
+    exit /b 0
+)
+
+echo Found: %ISCC%
+echo.
+echo Compiling installer with Inno Setup ...
+echo.
+"%ISCC%" /Qp installer.iss
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Inno Setup compile failed. See messages above.
+    pause
+    exit /b 1
+)
+
 echo.
 echo ====================================================
-echo  Build SUCCESS  -  v%APP_VERSION%
+echo  Build SUCCESS  -  v%APP_VERSION%   ^(complete^)
 echo ====================================================
 echo.
-echo  PyInstaller output : dist\MemoryNest Sync\
-echo  Installer template : installer.iss   (synced to v%APP_VERSION%)
+echo  Final installer:
+echo    %CD%\installer_output\MemoryNestSync_Setup_v%APP_VERSION%.exe
 echo.
-echo  Next step : open installer.iss in Inno Setup Compiler
-echo               and click Compile.
-echo  Output    : installer_output\MemoryNestSync_Setup_v%APP_VERSION%.exe
+echo  Distribute this single .exe — it will install MemoryNest Sync
+echo  on any Windows machine without requiring admin rights by default.
 echo.
+
+REM Open the output folder so the user sees the file immediately.
+if exist "installer_output" start "" "%CD%\installer_output"
 
 pause
 endlocal
