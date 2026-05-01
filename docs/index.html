@@ -81,6 +81,8 @@
     .nav-links { display: flex; gap: 24px; align-items: center; font-size: 0.88rem; }
     .nav-links a { color: var(--muted); transition: color 0.2s; white-space: nowrap; }
     .nav-links a:hover { color: var(--text); }
+    .nav-links a.nav-mapper { color: var(--gold); font-weight: 600; }
+    .nav-links a.nav-mapper:hover { color: var(--gold-light); }
     .nav-cta {
       background: var(--gold) !important;
       color: var(--btn-text) !important;
@@ -174,6 +176,55 @@
       filter: drop-shadow(0 24px 48px rgba(0,0,0,0.6));
     }
 
+    /* ── WHAT'S NEW STRIP ── */
+    .whats-new {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      padding: 14px 48px;
+    }
+    .whats-new-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .wn-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--gold);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .wn-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .wn-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .wn-chip {
+      font-size: 0.78rem;
+      color: var(--sub);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 12px;
+    }
+    .wn-chip.highlight {
+      color: var(--gold);
+      border-color: #3a2800;
+      background: #1e1500;
+    }
+    [data-theme="light"] .wn-chip.highlight {
+      background: #fdf3e0;
+      border-color: #e8c97a;
+    }
+
     /* ── SECTION COMMON ── */
     .section { padding: 80px 48px; }
     .section-alt {
@@ -233,6 +284,150 @@
     .arrow-mid .arr { font-size: 2rem; color: var(--gold); line-height: 1; }
     .arrow-mid small { font-size: 0.65rem; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; line-height: 1.4; }
 
+    /* ── MEMORY MAPPER SPOTLIGHT ── */
+    .mm-section {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .mm-section::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 70% 50%, rgba(201,149,42,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    [data-theme="light"] .mm-section::before {
+      background: radial-gradient(ellipse 60% 50% at 70% 50%, rgba(160,107,10,0.06) 0%, transparent 70%);
+    }
+    .mm-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+    .mm-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e1500;
+      border: 1px solid #3a2800;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 20px;
+    }
+    [data-theme="light"] .mm-eyebrow {
+      background: #fdf3e0;
+      border-color: #e8c97a;
+    }
+    .mm-text h2 {
+      font-size: clamp(1.7rem, 2.8vw, 2.4rem);
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+    .mm-text h2 em { font-style: normal; color: var(--gold-light); }
+    .mm-tagline {
+      font-size: 1rem;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 18px;
+    }
+    .mm-desc {
+      font-size: 0.95rem;
+      color: var(--sub);
+      line-height: 1.75;
+      margin-bottom: 28px;
+      max-width: 420px;
+    }
+    .mm-bullets { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .mm-bullets li {
+      font-size: 0.9rem;
+      color: var(--sub);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .mm-bullets li .bul-icon { font-size: 1.1rem; flex-shrink: 0; }
+    .mm-bullets li strong { color: var(--text); }
+
+    /* Memory Mapper mockup card */
+    .mm-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 56px rgba(0,0,0,0.45);
+    }
+    [data-theme="light"] .mm-card {
+      box-shadow: 0 12px 32px rgba(0,0,0,0.14);
+    }
+    .mm-card-header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 13px 20px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mm-card-header::before {
+      content: "🗂️";
+      font-size: 0.9rem;
+    }
+    .mm-rule {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .mm-rule:last-child { border-bottom: none; }
+    .mm-rule:hover { background: rgba(201,149,42,0.05); }
+    .mm-rule-icon { font-size: 1.35rem; flex-shrink: 0; }
+    .mm-rule-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .mm-rule-name { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+    .mm-rule-range { font-size: 0.75rem; color: var(--muted); }
+    .mm-rule-dest {
+      font-size: 0.78rem;
+      font-family: "Consolas", "Courier New", monospace;
+      color: var(--gold-light);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .mm-rule-dest.muted-dest { color: var(--faint); }
+    .mm-priority-badge {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: #1e1500;
+      color: var(--gold);
+      border: 1px solid #3a2800;
+      flex-shrink: 0;
+    }
+    [data-theme="light"] .mm-priority-badge {
+      background: #fdf3e0;
+      border-color: #e8c97a;
+    }
+    .mm-rule-default .mm-rule-name { color: var(--muted); font-weight: 400; font-style: italic; }
+
     /* ── FEATURES ── */
     .features-grid {
       display: grid;
@@ -253,6 +448,26 @@
     .fcard-icon { font-size: 1.8rem; margin-bottom: 14px; }
     .fcard h3 { font-size: 0.97rem; font-weight: 700; margin-bottom: 8px; color: var(--text); }
     .fcard p { font-size: 0.85rem; color: var(--sub); line-height: 1.65; }
+    .fcard .new-tag {
+      display: inline-block;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: #1e1500;
+      border: 1px solid #3a2800;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+      position: relative;
+      top: -1px;
+    }
+    [data-theme="light"] .fcard .new-tag {
+      background: #fdf3e0;
+      border-color: #e8c97a;
+    }
 
     /* ── CUSTOMIZATION ── */
     .custom-grid {
@@ -420,6 +635,7 @@
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
       .features-grid, .custom-grid { grid-template-columns: 1fr 1fr; }
+      .mm-inner { grid-template-columns: 1fr; gap: 40px; }
     }
     @media (max-width: 768px) {
       nav { padding: 14px 20px; }
@@ -433,6 +649,9 @@
       .section { padding: 56px 24px; }
       .trust-strip { padding: 40px 24px; gap: 28px; }
       footer { flex-direction: column; align-items: center; text-align: center; padding: 32px 24px; }
+      .whats-new { padding: 12px 20px; }
+      .mm-inner { grid-template-columns: 1fr; }
+      .mm-rule-dest { display: none; }
     }
   </style>
 </head>
@@ -448,11 +667,12 @@
     <div class="nav-links">
       <a href="#problem">Problem</a>
       <a href="#features">Features</a>
+      <a href="#mapper" class="nav-mapper">✨ Mapper</a>
       <a href="#customize">Customize</a>
       <a href="#safe">Safe</a>
       <a href="#donate">Support</a>
       <a href="https://github.com/ziggaza/memorynest-sync" target="_blank">GitHub</a>
-      <a class="nav-cta" href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.0.0/MemoryNestSync_Setup_v1.0.0.exe">Download Free</a>
+      <a class="nav-cta" href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.5.0/MemoryNestSync_Setup_v1.5.0.exe">Download Free</a>
     </div>
     <button class="theme-toggle" id="themeBtn" title="Toggle light/dark mode">🌙</button>
   </div>
@@ -461,18 +681,18 @@
 <!-- HERO -->
 <section class="hero">
   <div class="hero-text">
-    <div class="hero-badge">Free · Windows 10/11 · v1.0.0</div>
+    <div class="hero-badge">Free · Windows 10/11 · v1.5.0</div>
     <h1>Your memories deserve a home —<br/><em>not a chaos of folders</em></h1>
     <p>Whether you have a few gigabytes of family memories or a massive 20TB+ archive — MemoryNest Sync automatically organizes your photos and videos into clean, dated folders, sorted by device, year, and month. Fully customizable. No cloud. No subscription. Forever free.</p>
     <div class="hero-actions">
       <a class="btn-primary"
-         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.0.0/MemoryNestSync_Setup_v1.0.0.exe">
+         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.5.0/MemoryNestSync_Setup_v1.5.0.exe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
           <polyline points="7 10 12 15 17 10"/>
           <line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
-        Download Free — 24 MB
+        Download Free — 34.6 MB
       </a>
       <div class="hero-meta">
         Windows 10 / 11
@@ -487,6 +707,21 @@
     <img src="hero.png" alt="MemoryNest Sync organizes photos and videos from all your devices into clean folders" />
   </div>
 </section>
+
+<!-- WHAT'S NEW IN v1.5.0 -->
+<div class="whats-new">
+  <div class="whats-new-inner">
+    <div class="wn-label">New in v1.5.0</div>
+    <div class="wn-divider"></div>
+    <div class="wn-chips">
+      <span class="wn-chip highlight">✨ Memory Mapper</span>
+      <span class="wn-chip">🖱️ Drag &amp; Drop folders</span>
+      <span class="wn-chip">⚙️ Simple / Advanced mode</span>
+      <span class="wn-chip">📤 Export Activity Log</span>
+      <span class="wn-chip">📂 Open Destination button</span>
+    </div>
+  </div>
+</div>
 
 <!-- PROBLEM / SOLUTION -->
 <section class="section section-alt" id="problem">
@@ -558,6 +793,21 @@
       <p>From a single camera roll to a 20TB+ multi-drive archive — MemoryNest Sync handles it all. Parallel metadata threads keep scanning fast on both HDD and SSD.</p>
     </div>
     <div class="fcard">
+      <div class="fcard-icon">🖱️</div>
+      <h3>Drag &amp; Drop folders <span class="new-tag">NEW</span></h3>
+      <p>Just drag your source or destination folder straight into the app — no browsing required. Set up a new job in seconds.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">🎛️</div>
+      <h3>Simple / Advanced mode <span class="new-tag">NEW</span></h3>
+      <p>New users start in Simple mode — a clean, focused interface. Power users can flip to Advanced mode for full control over every setting.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">📤</div>
+      <h3>Export Activity Log <span class="new-tag">NEW</span></h3>
+      <p>Save a full record of every file transfer, skip, and duplicate as a <span class="mono">.txt</span> or <span class="mono">.csv</span> file — perfect for auditing large library migrations.</p>
+    </div>
+    <div class="fcard">
       <div class="fcard-icon">🪵</div>
       <h3>Full activity log</h3>
       <p>Every file move, copy, duplicate, and error is logged with details. Daily rotating logs keep your library audit-ready.</p>
@@ -566,6 +816,87 @@
       <div class="fcard-icon">🌙</div>
       <h3>Polished desktop app</h3>
       <p>Dark / Light / System theme. Runs quietly in the system tray. No terminal, no scripts — just a clean UI that works.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MEMORY MAPPER SPOTLIGHT -->
+<section class="section mm-section" id="mapper">
+  <div class="mm-inner">
+    <div class="mm-text">
+      <div class="mm-eyebrow">✨ Flagship Feature</div>
+      <h2>Meet <em>Memory Mapper</em></h2>
+      <p class="mm-tagline">Smart event folders that think ahead.</p>
+      <p class="mm-desc">
+        Standard organizers sort by date. Memory Mapper sorts by <em>meaning</em>. Create named event rules — "Japan Trip 2024", "Mom's Birthday", "Summer Camp" — with a date range and optional device filter. When MemoryNest Sync runs, matching files land in your event folder automatically, not buried inside a generic date folder.
+      </p>
+      <ul class="mm-bullets">
+        <li>
+          <span class="bul-icon">📅</span>
+          <span><strong>Visual date picker</strong> — set start and end dates without typing</span>
+        </li>
+        <li>
+          <span class="bul-icon">📱</span>
+          <span><strong>Device filter</strong> — target a specific camera or apply to all devices</span>
+        </li>
+        <li>
+          <span class="bul-icon">🏆</span>
+          <span><strong>Priority matching</strong> — rules are checked in order; first match wins</span>
+        </li>
+        <li>
+          <span class="bul-icon">✏️</span>
+          <span><strong>Inline editing</strong> — rename or adjust any rule without leaving the screen</span>
+        </li>
+        <li>
+          <span class="bul-icon">📁</span>
+          <span><strong>Everything else</strong> falls back to your standard device / date structure</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="mm-visual">
+      <div class="mm-card">
+        <div class="mm-card-header">Memory Mapper — Event Rules</div>
+
+        <div class="mm-rule">
+          <span class="mm-rule-icon">✈️</span>
+          <div class="mm-rule-info">
+            <span class="mm-rule-name">Japan Trip 2024</span>
+            <span class="mm-rule-range">2024-03-15 → 2024-03-28 · All devices</span>
+          </div>
+          <span class="mm-priority-badge">#1</span>
+          <span class="mm-rule-dest">→ Japan Trip 2024/</span>
+        </div>
+
+        <div class="mm-rule">
+          <span class="mm-rule-icon">🎂</span>
+          <div class="mm-rule-info">
+            <span class="mm-rule-name">Mom's Birthday</span>
+            <span class="mm-rule-range">2024-06-12 · iPhone 15 Pro</span>
+          </div>
+          <span class="mm-priority-badge">#2</span>
+          <span class="mm-rule-dest">→ Mom's Birthday/</span>
+        </div>
+
+        <div class="mm-rule">
+          <span class="mm-rule-icon">🏕️</span>
+          <div class="mm-rule-info">
+            <span class="mm-rule-name">Summer Camp</span>
+            <span class="mm-rule-range">2024-07-08 → 2024-07-14 · GoPro Hero 12</span>
+          </div>
+          <span class="mm-priority-badge">#3</span>
+          <span class="mm-rule-dest">→ Summer Camp/</span>
+        </div>
+
+        <div class="mm-rule mm-rule-default">
+          <span class="mm-rule-icon">📁</span>
+          <div class="mm-rule-info">
+            <span class="mm-rule-name">Everything else</span>
+            <span class="mm-rule-range">Standard device / year / month folders</span>
+          </div>
+          <span class="mm-rule-dest muted-dest">→ Device / YYYY / MM/</span>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -620,7 +951,7 @@
     <div class="step">
       <div class="step-num">1</div>
       <h3>Choose source &amp; destination</h3>
-      <p>Add one or more source folders from any drive or SD card. Then pick a destination folder where the organized library will be built. You stay in full control of where everything goes.</p>
+      <p>Add one or more source folders from any drive or SD card — or simply drag &amp; drop them into the app. Then pick a destination folder. You stay in full control of where everything goes.</p>
     </div>
     <div class="step">
       <div class="step-num">2</div>
