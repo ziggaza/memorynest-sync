@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MemoryNest Sync — Organize Your Photo & Video Library</title>
+  <meta name="description" content="Free Windows app that automatically organizes 20TB+ of photos and videos into clean folders by device, year, and month. No cloud. No subscription." />
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="apple-touch-icon" href="logo.png" />
-  <meta name="description" content="Free Windows app that automatically organizes 20TB+ of photos and videos into clean folders by device, year, and month. No cloud. No subscription." />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -27,6 +27,8 @@
       --code-color: #888;
       --btn-text: #111;
       --safe-em: #ffffff;
+      --orange: #D4752A;
+      --orange-light: #F09050;
     }
 
     /* ── LIGHT THEME ── */
@@ -45,6 +47,8 @@
       --code-color: #555;
       --btn-text: #111;
       --safe-em: #000000;
+      --orange: #c05a10;
+      --orange-light: #d97030;
     }
 
     html { scroll-behavior: smooth; }
@@ -80,11 +84,13 @@
     .nav-brand img { width: 34px; height: 34px; border-radius: 50%; }
     .nav-brand span { font-size: 1rem; font-weight: 700; color: var(--gold); }
     .nav-right { display: flex; gap: 24px; align-items: center; }
-    .nav-links { display: flex; gap: 24px; align-items: center; font-size: 0.88rem; }
+    .nav-links { display: flex; gap: 20px; align-items: center; font-size: 0.88rem; }
     .nav-links a { color: var(--muted); transition: color 0.2s; white-space: nowrap; }
     .nav-links a:hover { color: var(--text); }
-    .nav-links a.nav-mapper { color: var(--gold); font-weight: 600; }
-    .nav-links a.nav-mapper:hover { color: var(--gold-light); }
+    .nav-links a.nav-mapper  { color: var(--gold);   font-weight: 600; }
+    .nav-links a.nav-nMapper { color: var(--orange);  font-weight: 600; }
+    .nav-links a.nav-mapper:hover  { color: var(--gold-light); }
+    .nav-links a.nav-nMapper:hover { color: var(--orange-light); }
     .nav-cta {
       background: var(--gold) !important;
       color: var(--btn-text) !important;
@@ -95,7 +101,6 @@
     }
     .nav-cta:hover { background: var(--gold-light) !important; }
 
-    /* Theme toggle button */
     .theme-toggle {
       background: none;
       border: 1px solid var(--border);
@@ -133,10 +138,7 @@
       text-transform: uppercase;
       margin-bottom: 22px;
     }
-    [data-theme="light"] .hero-badge {
-      background: #fdf3e0;
-      border-color: #e8c97a;
-    }
+    [data-theme="light"] .hero-badge { background: #fdf3e0; border-color: #e8c97a; }
     .hero-text h1 {
       font-size: clamp(2rem, 3.2vw, 2.9rem);
       font-weight: 800;
@@ -202,12 +204,7 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
-    .wn-divider {
-      width: 1px;
-      height: 18px;
-      background: var(--border);
-      flex-shrink: 0;
-    }
+    .wn-divider { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
     .wn-chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .wn-chip {
       font-size: 0.78rem;
@@ -217,15 +214,18 @@
       border-radius: 20px;
       padding: 3px 12px;
     }
-    .wn-chip.highlight {
+    .wn-chip.gold {
       color: var(--gold);
       border-color: #3a2800;
       background: #1e1500;
     }
-    [data-theme="light"] .wn-chip.highlight {
-      background: #fdf3e0;
-      border-color: #e8c97a;
+    .wn-chip.orange {
+      color: var(--orange-light);
+      border-color: #3d2010;
+      background: #1e0e00;
     }
+    [data-theme="light"] .wn-chip.gold  { background: #fdf3e0; border-color: #e8c97a; }
+    [data-theme="light"] .wn-chip.orange { background: #fff0e8; border-color: #f0b080; }
 
     /* ── SECTION COMMON ── */
     .section { padding: 80px 48px; }
@@ -236,12 +236,7 @@
     }
     .section-header { text-align: center; margin-bottom: 52px; }
     .section-header h2 { font-size: 1.85rem; font-weight: 700; color: var(--text); margin-bottom: 10px; }
-    .section-header p {
-      color: var(--sub);
-      font-size: 0.97rem;
-      max-width: 520px;
-      margin: 0 auto;
-    }
+    .section-header p { color: var(--sub); font-size: 0.97rem; max-width: 520px; margin: 0 auto; }
 
     /* ── PROBLEM / SOLUTION ── */
     .problem-inner { max-width: 900px; margin: 0 auto; }
@@ -257,13 +252,7 @@
       border-radius: 12px;
       padding: 24px 22px;
     }
-    .ba-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      margin-bottom: 16px;
-    }
+    .ba-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }
     .ba-label.before { color: #e05555; }
     .ba-label.after  { color: #55c977; }
     .ba-box code {
@@ -276,15 +265,49 @@
     .ba-box code .dim  { color: var(--faint); }
     .ba-box code .hi   { color: var(--gold-light); }
     .ba-box code .ok   { color: #55c977; }
-    .arrow-mid {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      text-align: center;
-    }
+    .arrow-mid { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
     .arrow-mid .arr { font-size: 2rem; color: var(--gold); line-height: 1; }
     .arrow-mid small { font-size: 0.65rem; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; line-height: 1.4; }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      max-width: 1020px;
+      margin: 0 auto;
+    }
+    .fcard {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 22px;
+      transition: border-color 0.2s;
+    }
+    [data-theme="dark"] .fcard:hover { border-color: #444; }
+    [data-theme="light"] .fcard:hover { border-color: #bbb; }
+    .fcard-icon { font-size: 1.8rem; margin-bottom: 14px; }
+    .fcard h3 { font-size: 0.97rem; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+    .fcard p  { font-size: 0.85rem; color: var(--sub); line-height: 1.65; }
+    .vtag {
+      display: inline-block;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+      position: relative;
+      top: -1px;
+    }
+    .vtag.gold   { color: var(--gold);          background: #1e1500; border: 1px solid #3a2800; }
+    .vtag.orange { color: var(--orange-light);   background: #1e0e00; border: 1px solid #3d2010; }
+    .vtag.blue   { color: #7ab8f5;               background: #0d1e30; border: 1px solid #1a3a5c; }
+    [data-theme="light"] .vtag.gold   { background: #fdf3e0; border-color: #e8c97a; }
+    [data-theme="light"] .vtag.orange { background: #fff0e8; border-color: #f0b080; }
+    [data-theme="light"] .vtag.blue   { background: #e8f2ff; border-color: #90bce8; color: #2266aa; }
 
     /* ── MEMORY MAPPER SPOTLIGHT ── */
     .mm-section {
@@ -316,21 +339,18 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: #1e1500;
-      border: 1px solid #3a2800;
       border-radius: 20px;
       padding: 4px 14px;
       font-size: 0.72rem;
       font-weight: 700;
       letter-spacing: 1px;
       text-transform: uppercase;
-      color: var(--gold);
       margin-bottom: 20px;
     }
-    [data-theme="light"] .mm-eyebrow {
-      background: #fdf3e0;
-      border-color: #e8c97a;
-    }
+    .mm-eyebrow.gold   { color: var(--gold);         background: #1e1500; border: 1px solid #3a2800; }
+    .mm-eyebrow.orange { color: var(--orange-light);  background: #1e0e00; border: 1px solid #3d2010; }
+    [data-theme="light"] .mm-eyebrow.gold   { background: #fdf3e0; border-color: #e8c97a; }
+    [data-theme="light"] .mm-eyebrow.orange { background: #fff0e8; border-color: #f0b080; }
     .mm-text h2 {
       font-size: clamp(1.7rem, 2.8vw, 2.4rem);
       font-weight: 800;
@@ -338,28 +358,14 @@
       color: var(--text);
       margin-bottom: 10px;
     }
-    .mm-text h2 em { font-style: normal; color: var(--gold-light); }
-    .mm-tagline {
-      font-size: 1rem;
-      color: var(--gold);
-      font-weight: 600;
-      margin-bottom: 18px;
-    }
-    .mm-desc {
-      font-size: 0.95rem;
-      color: var(--sub);
-      line-height: 1.75;
-      margin-bottom: 28px;
-      max-width: 420px;
-    }
+    .mm-text h2 em.gold   { font-style: normal; color: var(--gold-light); }
+    .mm-text h2 em.orange { font-style: normal; color: var(--orange-light); }
+    .mm-tagline { font-size: 1rem; font-weight: 600; margin-bottom: 18px; }
+    .mm-tagline.gold   { color: var(--gold); }
+    .mm-tagline.orange { color: var(--orange-light); }
+    .mm-desc { font-size: 0.95rem; color: var(--sub); line-height: 1.75; margin-bottom: 28px; max-width: 420px; }
     .mm-bullets { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-    .mm-bullets li {
-      font-size: 0.9rem;
-      color: var(--sub);
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-    }
+    .mm-bullets li { font-size: 0.9rem; color: var(--sub); display: flex; align-items: flex-start; gap: 10px; }
     .mm-bullets li .bul-icon { font-size: 1.1rem; flex-shrink: 0; }
     .mm-bullets li strong { color: var(--text); }
 
@@ -371,9 +377,7 @@
       overflow: hidden;
       box-shadow: 0 24px 56px rgba(0,0,0,0.45);
     }
-    [data-theme="light"] .mm-card {
-      box-shadow: 0 12px 32px rgba(0,0,0,0.14);
-    }
+    [data-theme="light"] .mm-card { box-shadow: 0 12px 32px rgba(0,0,0,0.14); }
     .mm-card-header {
       background: var(--bg2);
       border-bottom: 1px solid var(--border);
@@ -385,10 +389,6 @@
       display: flex;
       align-items: center;
       gap: 8px;
-    }
-    .mm-card-header::before {
-      content: "🗂️";
-      font-size: 0.9rem;
     }
     .mm-rule {
       display: flex;
@@ -404,72 +404,147 @@
     .mm-rule-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
     .mm-rule-name { font-size: 0.88rem; font-weight: 700; color: var(--text); }
     .mm-rule-range { font-size: 0.75rem; color: var(--muted); }
-    .mm-rule-dest {
-      font-size: 0.78rem;
-      font-family: "Consolas", "Courier New", monospace;
-      color: var(--gold-light);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
+    .mm-rule-dest { font-size: 0.78rem; font-family: "Consolas","Courier New",monospace; color: var(--gold-light); white-space: nowrap; flex-shrink: 0; }
     .mm-rule-dest.muted-dest { color: var(--faint); }
     .mm-priority-badge {
-      font-size: 0.6rem;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      padding: 1px 7px;
-      border-radius: 10px;
-      background: #1e1500;
-      color: var(--gold);
-      border: 1px solid #3a2800;
-      flex-shrink: 0;
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+      padding: 1px 7px; border-radius: 10px; flex-shrink: 0;
+      background: #1e1500; color: var(--gold); border: 1px solid #3a2800;
     }
-    [data-theme="light"] .mm-priority-badge {
-      background: #fdf3e0;
-      border-color: #e8c97a;
-    }
+    [data-theme="light"] .mm-priority-badge { background: #fdf3e0; border-color: #e8c97a; }
     .mm-rule-default .mm-rule-name { color: var(--muted); font-weight: 400; font-style: italic; }
 
-    /* ── FEATURES ── */
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      max-width: 1020px;
-      margin: 0 auto;
-    }
-    .fcard {
+    /* ── NAME MAPPER SPOTLIGHT ── */
+    .nm-section {
       background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .nm-section::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 30% 50%, rgba(212,117,42,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    [data-theme="light"] .nm-section::before {
+      background: radial-gradient(ellipse 60% 50% at 30% 50%, rgba(192,90,16,0.06) 0%, transparent 70%);
+    }
+    .nm-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    /* Name Mapper card */
+    .nm-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 56px rgba(0,0,0,0.45);
+    }
+    [data-theme="light"] .nm-card { box-shadow: 0 12px 32px rgba(0,0,0,0.14); }
+    .nm-card-header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 13px 20px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nm-pattern-row {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .nm-pattern-label { font-size: 0.72rem; color: var(--muted); font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+    .nm-pattern-val {
+      font-family: "Consolas","Courier New",monospace;
+      font-size: 0.82rem;
+      color: var(--orange-light);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      flex: 1;
+    }
+    .nm-examples { padding: 4px 0; }
+    .nm-ex-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .nm-ex-row:last-child { border-bottom: none; }
+    .nm-ex-before {
+      font-family: "Consolas","Courier New",monospace;
+      font-size: 0.76rem;
+      color: var(--faint);
+      text-decoration: line-through;
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+    .nm-ex-arrow { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; }
+    .nm-ex-after {
+      font-family: "Consolas","Courier New",monospace;
+      font-size: 0.76rem;
+      color: var(--orange-light);
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .nm-presets {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .nm-preset-chip {
+      font-size: 0.7rem;
+      color: var(--muted);
+      background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 28px 22px;
-      transition: border-color 0.2s;
+      padding: 3px 10px;
+      cursor: default;
     }
-    [data-theme="dark"] .fcard:hover { border-color: #444; }
-    [data-theme="light"] .fcard:hover { border-color: #bbb; }
-    .fcard-icon { font-size: 1.8rem; margin-bottom: 14px; }
-    .fcard h3 { font-size: 0.97rem; font-weight: 700; margin-bottom: 8px; color: var(--text); }
-    .fcard p { font-size: 0.85rem; color: var(--sub); line-height: 1.65; }
-    .fcard .new-tag {
-      display: inline-block;
-      font-size: 0.6rem;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      color: var(--gold);
-      background: #1e1500;
-      border: 1px solid #3a2800;
-      border-radius: 4px;
-      padding: 1px 6px;
-      margin-left: 6px;
-      vertical-align: middle;
-      position: relative;
-      top: -1px;
+    .nm-preset-chip.active {
+      color: var(--orange-light);
+      background: #1e0e00;
+      border-color: #3d2010;
     }
-    [data-theme="light"] .fcard .new-tag {
-      background: #fdf3e0;
-      border-color: #e8c97a;
+    [data-theme="light"] .nm-preset-chip.active { background: #fff0e8; border-color: #f0b080; }
+
+    /* token grid */
+    .nm-tokens {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 28px;
     }
+    .nm-token {
+      font-family: "Consolas","Courier New",monospace;
+      font-size: 0.8rem;
+      color: var(--orange-light);
+      background: #1e0e00;
+      border: 1px solid #3d2010;
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+    [data-theme="light"] .nm-token { background: #fff0e8; border-color: #f0b080; }
 
     /* ── CUSTOMIZATION ── */
     .custom-grid {
@@ -487,29 +562,17 @@
     }
     .custom-card .cc-tag {
       display: inline-block;
-      font-size: 0.68rem;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      color: var(--gold);
-      background: #1e1500;
-      border: 1px solid #3a2800;
-      border-radius: 4px;
-      padding: 2px 8px;
-      margin-bottom: 14px;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--gold); background: #1e1500; border: 1px solid #3a2800;
+      border-radius: 4px; padding: 2px 8px; margin-bottom: 14px;
     }
-    [data-theme="light"] .custom-card .cc-tag {
-      background: #fdf3e0;
-      border-color: #e8c97a;
-    }
+    [data-theme="light"] .custom-card .cc-tag { background: #fdf3e0; border-color: #e8c97a; }
     .custom-card h3 { font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 10px; }
-    .custom-card p { font-size: 0.85rem; color: var(--sub); line-height: 1.65; margin-bottom: 14px; }
+    .custom-card p  { font-size: 0.85rem; color: var(--sub); line-height: 1.65; margin-bottom: 14px; }
     .custom-card ul { list-style: none; padding: 0; }
     .custom-card ul li {
-      font-size: 0.82rem;
-      color: var(--muted);
-      padding: 4px 0 4px 16px;
-      position: relative;
+      font-size: 0.82rem; color: var(--muted);
+      padding: 4px 0 4px 16px; position: relative;
     }
     .custom-card ul li::before { content: "→"; position: absolute; left: 0; color: var(--gold); font-size: 0.75rem; }
     .mono { color: var(--gold-light); font-family: "Consolas","Courier New",monospace; font-size: 0.8rem; }
@@ -524,19 +587,14 @@
     }
     .step { text-align: center; }
     .step-num {
-      width: 48px; height: 48px;
-      border-radius: 50%;
-      background: var(--gold);
-      color: var(--btn-text);
-      font-weight: 800;
-      font-size: 1.1rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--gold); color: var(--btn-text);
+      font-weight: 800; font-size: 1.1rem;
+      display: flex; align-items: center; justify-content: center;
       margin: 0 auto 18px;
     }
     .step h3 { font-size: 1rem; font-weight: 700; margin-bottom: 10px; color: var(--text); }
-    .step p { font-size: 0.87rem; color: var(--sub); line-height: 1.65; }
+    .step p   { font-size: 0.87rem; color: var(--sub); line-height: 1.65; }
 
     /* ── SAFE ── */
     .safe-grid {
@@ -557,7 +615,7 @@
     }
     .safe-icon { font-size: 1.6rem; flex-shrink: 0; margin-top: 2px; }
     .safe-card h4 { font-size: 0.97rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-    .safe-card p { font-size: 0.84rem; color: var(--sub); line-height: 1.6; }
+    .safe-card p  { font-size: 0.84rem; color: var(--sub); line-height: 1.6; }
     .safe-card strong { color: var(--safe-em); }
 
     /* ── TRUST STRIP ── */
@@ -585,28 +643,17 @@
       padding: 48px 40px;
       text-align: center;
     }
-    [data-theme="light"] .donate-box {
-      background: linear-gradient(135deg, #fdf3e0, #f4f4f4);
-      border-color: #e8c97a;
-    }
+    [data-theme="light"] .donate-box { background: linear-gradient(135deg, #fdf3e0, #f4f4f4); border-color: #e8c97a; }
     .donate-box h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: 14px; color: var(--text); }
     .donate-box p {
-      color: var(--sub);
-      font-size: 0.97rem;
-      line-height: 1.75;
-      margin-bottom: 28px;
-      max-width: 460px;
-      margin-left: auto;
-      margin-right: auto;
+      color: var(--sub); font-size: 0.97rem; line-height: 1.75;
+      margin-bottom: 28px; max-width: 460px; margin-left: auto; margin-right: auto;
     }
     .btn-donate {
       display: inline-block;
-      background: #FF5E5B;
-      color: #fff;
-      font-weight: 700;
-      padding: 13px 30px;
-      border-radius: 8px;
-      font-size: 0.95rem;
+      background: #FF5E5B; color: #fff;
+      font-weight: 700; padding: 13px 30px;
+      border-radius: 8px; font-size: 0.95rem;
       transition: opacity 0.2s, transform 0.1s;
     }
     .btn-donate:hover { background: #E05350; transform: translateY(-1px); }
@@ -615,20 +662,14 @@
     footer {
       border-top: 1px solid var(--border);
       padding: 36px 48px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-      flex-wrap: wrap;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 24px; flex-wrap: wrap;
     }
     .footer-brand img {
       height: 80px;
       filter: brightness(1.5) contrast(1.1) drop-shadow(0 0 8px rgba(200,150,40,0.3));
-      opacity: 1;
     }
-    [data-theme="light"] .footer-brand img {
-      filter: brightness(0.85) contrast(1.2);
-    }
+    [data-theme="light"] .footer-brand img { filter: brightness(0.85) contrast(1.2); }
     .footer-links { display: flex; gap: 24px; font-size: 0.84rem; }
     .footer-links a { color: var(--muted); }
     .footer-links a:hover { color: var(--text); }
@@ -637,7 +678,7 @@
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
       .features-grid, .custom-grid { grid-template-columns: 1fr 1fr; }
-      .mm-inner { grid-template-columns: 1fr; gap: 40px; }
+      .mm-inner, .nm-inner { grid-template-columns: 1fr; gap: 40px; }
     }
     @media (max-width: 768px) {
       nav { padding: 14px 20px; }
@@ -652,8 +693,8 @@
       .trust-strip { padding: 40px 24px; gap: 28px; }
       footer { flex-direction: column; align-items: center; text-align: center; padding: 32px 24px; }
       .whats-new { padding: 12px 20px; }
-      .mm-inner { grid-template-columns: 1fr; }
-      .mm-rule-dest { display: none; }
+      .mm-inner, .nm-inner { grid-template-columns: 1fr; }
+      .mm-rule-dest, .nm-ex-before { display: none; }
     }
   </style>
 </head>
@@ -667,14 +708,17 @@
   </div>
   <div class="nav-right">
     <div class="nav-links">
-      <a href="#problem">Problem</a>
       <a href="#features">Features</a>
-      <a href="#mapper" class="nav-mapper">✨ Mapper</a>
+      <a href="#mapper"  class="nav-mapper">✨ Mapper</a>
+      <a href="#nMapper" class="nav-nMapper">✏️ Name</a>
       <a href="#customize">Customize</a>
       <a href="#safe">Safe</a>
       <a href="#donate">Support</a>
       <a href="https://github.com/ziggaza/memorynest-sync" target="_blank">GitHub</a>
-      <a class="nav-cta" href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.5.0/MemoryNestSync_Setup_v1.5.0.exe">Download Free</a>
+      <a class="nav-cta download-btn"
+         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.7.0/MemoryNestSync_Setup_v1.7.0.exe">
+        Download Free
+      </a>
     </div>
     <button class="theme-toggle" id="themeBtn" title="Toggle light/dark mode">🌙</button>
   </div>
@@ -683,18 +727,18 @@
 <!-- HERO -->
 <section class="hero">
   <div class="hero-text">
-    <div class="hero-badge">Free · Windows 10/11 · v1.5.0</div>
+    <div class="hero-badge">Free · Windows 10/11 · <span class="version-tag">v1.7.0</span></div>
     <h1>Your memories deserve a home —<br/><em>not a chaos of folders</em></h1>
     <p>Whether you have a few gigabytes of family memories or a massive 20TB+ archive — MemoryNest Sync automatically organizes your photos and videos into clean, dated folders, sorted by device, year, and month. Fully customizable. No cloud. No subscription. Forever free.</p>
     <div class="hero-actions">
-      <a class="btn-primary"
-         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.5.0/MemoryNestSync_Setup_v1.5.0.exe">
+      <a class="btn-primary download-btn"
+         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.7.0/MemoryNestSync_Setup_v1.7.0.exe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
           <polyline points="7 10 12 15 17 10"/>
           <line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
-        Download Free — 34.6 MB
+        Download Free — <span class="download-size">54.25 MB</span>
       </a>
       <div class="hero-meta">
         Windows 10 / 11
@@ -710,17 +754,19 @@
   </div>
 </section>
 
-<!-- WHAT'S NEW IN v1.5.0 -->
+<!-- WHAT'S NEW IN v1.7.0 -->
 <div class="whats-new">
   <div class="whats-new-inner">
-    <div class="wn-label">New in v1.5.0</div>
+    <div class="wn-label">New in v1.7.0</div>
     <div class="wn-divider"></div>
     <div class="wn-chips">
-      <span class="wn-chip highlight">✨ Memory Mapper</span>
-      <span class="wn-chip">🖱️ Drag &amp; Drop folders</span>
-      <span class="wn-chip">⚙️ Simple / Advanced mode</span>
-      <span class="wn-chip">📤 Export Activity Log</span>
-      <span class="wn-chip">📂 Open Destination button</span>
+      <span class="wn-chip orange">✏️ Name Mapper</span>
+      <span class="wn-chip gold">✨ Memory Mapper</span>
+      <span class="wn-chip">📋 Skip List</span>
+      <span class="wn-chip">🌐 Live Language Switch</span>
+      <span class="wn-chip">📅 Run History</span>
+      <span class="wn-chip">🗑️ Duplicate Review</span>
+      <span class="wn-chip">🌍 Location-Based Sorting</span>
     </div>
   </div>
 </div>
@@ -781,8 +827,8 @@
     </div>
     <div class="fcard">
       <div class="fcard-icon">🔁</div>
-      <h3>Smart space saver</h3>
-      <p>Don't worry about copying the same photo twice. MemoryNest Sync smartly detects duplicates using fast xxHash fingerprinting and safely groups them for you to review — saving your precious hard drive space.</p>
+      <h3>Smart duplicate detection</h3>
+      <p>Detects duplicates using fast xxHash fingerprinting and safely groups them for review — saving precious hard drive space without deleting anything.</p>
     </div>
     <div class="fcard">
       <div class="fcard-icon">⏸️</div>
@@ -792,32 +838,47 @@
     <div class="fcard">
       <div class="fcard-icon">⚡</div>
       <h3>Handles any scale</h3>
-      <p>From a single camera roll to a 20TB+ multi-drive archive — MemoryNest Sync handles it all. Parallel metadata threads keep scanning fast on both HDD and SSD.</p>
+      <p>From a single camera roll to a 20TB+ multi-drive archive. Parallel transfer engine with 8 MB chunks keeps it fast on HDD and SSD alike.</p>
     </div>
     <div class="fcard">
       <div class="fcard-icon">🖱️</div>
-      <h3>Drag &amp; Drop folders <span class="new-tag">NEW</span></h3>
-      <p>Just drag your source or destination folder straight into the app — no browsing required. Set up a new job in seconds.</p>
+      <h3>Drag &amp; Drop folders <span class="vtag gold">v1.5</span></h3>
+      <p>Drag your source or destination folder straight into the app — no browsing needed. Set up a new job in seconds.</p>
     </div>
     <div class="fcard">
       <div class="fcard-icon">🎛️</div>
-      <h3>Simple / Advanced mode <span class="new-tag">NEW</span></h3>
-      <p>New users start in Simple mode — a clean, focused interface. Power users can flip to Advanced mode for full control over every setting.</p>
+      <h3>Simple / Advanced mode <span class="vtag gold">v1.5</span></h3>
+      <p>New users start in Simple mode — a clean, focused interface. Power users flip to Advanced for full control over every setting.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">🌍</div>
+      <h3>Location-Based Sorting <span class="vtag orange">v1.6</span></h3>
+      <p>GPS-tagged photos automatically sort into country and city folders — offline, no API key needed. Falls back gracefully when GPS is absent.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">📋</div>
+      <h3>Skip List <span class="vtag blue">v1.7</span></h3>
+      <p>Define glob patterns to permanently ignore — album art, NAS thumbnails, system files. Set once in Settings, never see them again.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">🌐</div>
+      <h3>Live Language Switch <span class="vtag blue">v1.7</span></h3>
+      <p>Switch the entire UI language without restarting. Auto-discovers all installed language packs — just select and go.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">📅</div>
+      <h3>Run History <span class="vtag blue">v1.7</span></h3>
+      <p>Every run and dry-run is recorded with date, mode, stats, and paths. Browse, compare, and track your library over time.</p>
+    </div>
+    <div class="fcard">
+      <div class="fcard-icon">🗑️</div>
+      <h3>Duplicate Review <span class="vtag blue">v1.7</span></h3>
+      <p>After a run, open a full review dialog to inspect duplicates by size and date — select and delete what you don't need, all in one place.</p>
     </div>
     <div class="fcard">
       <div class="fcard-icon">📤</div>
-      <h3>Export Activity Log <span class="new-tag">NEW</span></h3>
-      <p>Save a full record of every file transfer, skip, and duplicate as a <span class="mono">.txt</span> or <span class="mono">.csv</span> file — perfect for auditing large library migrations.</p>
-    </div>
-    <div class="fcard">
-      <div class="fcard-icon">🪵</div>
-      <h3>Full activity log</h3>
-      <p>Every file move, copy, duplicate, and error is logged with details. Daily rotating logs keep your library audit-ready.</p>
-    </div>
-    <div class="fcard">
-      <div class="fcard-icon">🌙</div>
-      <h3>Polished desktop app</h3>
-      <p>Dark / Light / System theme. Runs quietly in the system tray. No terminal, no scripts — just a clean UI that works.</p>
+      <h3>Export Activity Log <span class="vtag gold">v1.5</span></h3>
+      <p>Save a full record of every file transfer as <span class="mono">.txt</span> or <span class="mono">.csv</span> — perfect for auditing large migrations.</p>
     </div>
   </div>
 </section>
@@ -826,40 +887,23 @@
 <section class="section mm-section" id="mapper">
   <div class="mm-inner">
     <div class="mm-text">
-      <div class="mm-eyebrow">✨ Flagship Feature</div>
-      <h2>Meet <em>Memory Mapper</em></h2>
-      <p class="mm-tagline">Smart event folders that think ahead.</p>
+      <div class="mm-eyebrow gold">✨ Flagship Feature · Since v1.2</div>
+      <h2>Meet <em class="gold">Memory Mapper</em></h2>
+      <p class="mm-tagline gold">Smart event folders that think ahead.</p>
       <p class="mm-desc">
         Standard organizers sort by date. Memory Mapper sorts by <em>meaning</em>. Create named event rules — "Japan Trip 2024", "Mom's Birthday", "Summer Camp" — with a date range and optional device filter. When MemoryNest Sync runs, matching files land in your event folder automatically, not buried inside a generic date folder.
       </p>
       <ul class="mm-bullets">
-        <li>
-          <span class="bul-icon">📅</span>
-          <span><strong>Visual date picker</strong> — set start and end dates without typing</span>
-        </li>
-        <li>
-          <span class="bul-icon">📱</span>
-          <span><strong>Device filter</strong> — target a specific camera or apply to all devices</span>
-        </li>
-        <li>
-          <span class="bul-icon">🏆</span>
-          <span><strong>Priority matching</strong> — rules are checked in order; first match wins</span>
-        </li>
-        <li>
-          <span class="bul-icon">✏️</span>
-          <span><strong>Inline editing</strong> — rename or adjust any rule without leaving the screen</span>
-        </li>
-        <li>
-          <span class="bul-icon">📁</span>
-          <span><strong>Everything else</strong> falls back to your standard device / date structure</span>
-        </li>
+        <li><span class="bul-icon">📅</span><span><strong>Visual date picker</strong> — set start and end dates without typing</span></li>
+        <li><span class="bul-icon">📱</span><span><strong>Device filter</strong> — target a specific camera or apply to all devices</span></li>
+        <li><span class="bul-icon">🏆</span><span><strong>Priority matching</strong> — rules are checked in order; first match wins</span></li>
+        <li><span class="bul-icon">✏️</span><span><strong>Inline editing</strong> — rename or adjust any rule without leaving the screen</span></li>
+        <li><span class="bul-icon">📁</span><span><strong>Everything else</strong> falls back to your standard device / date structure</span></li>
       </ul>
     </div>
-
     <div class="mm-visual">
       <div class="mm-card">
-        <div class="mm-card-header">Memory Mapper — Event Rules</div>
-
+        <div class="mm-card-header">🗂️ Memory Mapper — Event Rules</div>
         <div class="mm-rule">
           <span class="mm-rule-icon">✈️</span>
           <div class="mm-rule-info">
@@ -869,7 +913,6 @@
           <span class="mm-priority-badge">#1</span>
           <span class="mm-rule-dest">→ Japan Trip 2024/</span>
         </div>
-
         <div class="mm-rule">
           <span class="mm-rule-icon">🎂</span>
           <div class="mm-rule-info">
@@ -879,7 +922,6 @@
           <span class="mm-priority-badge">#2</span>
           <span class="mm-rule-dest">→ Mom's Birthday/</span>
         </div>
-
         <div class="mm-rule">
           <span class="mm-rule-icon">🏕️</span>
           <div class="mm-rule-info">
@@ -889,7 +931,6 @@
           <span class="mm-priority-badge">#3</span>
           <span class="mm-rule-dest">→ Summer Camp/</span>
         </div>
-
         <div class="mm-rule mm-rule-default">
           <span class="mm-rule-icon">📁</span>
           <div class="mm-rule-info">
@@ -899,6 +940,84 @@
           <span class="mm-rule-dest muted-dest">→ Device / YYYY / MM/</span>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- NAME MAPPER SPOTLIGHT -->
+<section class="section nm-section" id="nMapper">
+  <div class="nm-inner">
+    <div class="nm-visual">
+      <div class="nm-card">
+        <div class="nm-card-header">✏️ Name Mapper — Rename Preview</div>
+        <div class="nm-pattern-row">
+          <span class="nm-pattern-label">Pattern</span>
+          <span class="nm-pattern-val">{date}_{device}_{seq}</span>
+        </div>
+        <div class="nm-examples">
+          <div class="nm-ex-row">
+            <span class="nm-ex-before">DSC_4821.jpg</span>
+            <span class="nm-ex-arrow">→</span>
+            <span class="nm-ex-after">2024-03-15_Canon-EOS-R6_001.jpg</span>
+          </div>
+          <div class="nm-ex-row">
+            <span class="nm-ex-before">IMG_0032.JPG</span>
+            <span class="nm-ex-arrow">→</span>
+            <span class="nm-ex-after">2024-03-15_iPhone-15-Pro_002.jpg</span>
+          </div>
+          <div class="nm-ex-row">
+            <span class="nm-ex-before">GH012345.MP4</span>
+            <span class="nm-ex-arrow">→</span>
+            <span class="nm-ex-after">2024-07-10_GoPro-Hero-12_001.mp4</span>
+          </div>
+          <div class="nm-ex-row">
+            <span class="nm-ex-before">VID_20240612.mp4</span>
+            <span class="nm-ex-arrow">→</span>
+            <span class="nm-ex-after">2024-06-12_Samsung-S24_001.mp4</span>
+          </div>
+        </div>
+        <div class="nm-presets">
+          <span class="nm-preset-chip active">Date + Device</span>
+          <span class="nm-preset-chip">Date Only</span>
+          <span class="nm-preset-chip">Device + Seq</span>
+          <span class="nm-preset-chip">Full Detail</span>
+          <span class="nm-preset-chip">Date + Category</span>
+          <span class="nm-preset-chip">Original</span>
+          <span class="nm-preset-chip">Custom…</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mm-text">
+      <div class="mm-eyebrow orange">✏️ Flagship Feature · New in v1.6</div>
+      <h2>Meet <em class="orange">Name Mapper</em></h2>
+      <p class="mm-tagline orange">Give every file a name that actually means something.</p>
+      <p class="mm-desc">
+        Raw camera filenames like <code style="color:var(--faint);font-family:monospace">DSC_4821.jpg</code> tell you nothing. Name Mapper uses EXIF tokens to rename files into clean, meaningful names — automatically, on every run. Pick a preset or build your own pattern from 14 tokens.
+      </p>
+      <div class="nm-tokens">
+        <span class="nm-token">{date}</span>
+        <span class="nm-token">{year}</span>
+        <span class="nm-token">{month}</span>
+        <span class="nm-token">{day}</span>
+        <span class="nm-token">{time}</span>
+        <span class="nm-token">{device}</span>
+        <span class="nm-token">{make}</span>
+        <span class="nm-token">{model}</span>
+        <span class="nm-token">{category}</span>
+        <span class="nm-token">{seq}</span>
+        <span class="nm-token">{hour}</span>
+        <span class="nm-token">{minute}</span>
+        <span class="nm-token">{second}</span>
+        <span class="nm-token">{original}</span>
+      </div>
+      <ul class="mm-bullets">
+        <li><span class="bul-icon">🎛️</span><span><strong>7 built-in presets</strong> — ready to use in one click</span></li>
+        <li><span class="bul-icon">👁️</span><span><strong>Live preview</strong> — see exactly how files will be renamed before running</span></li>
+        <li><span class="bul-icon">🔢</span><span><strong>Smart sequence counter</strong> — <code style="color:var(--orange-light);font-family:monospace">{seq}</code> resets per run, zero-pad width adjustable</span></li>
+        <li><span class="bul-icon">🛡️</span><span><strong>Duplicates stay original</strong> — renamed files never overwrite each other</span></li>
+        <li><span class="bul-icon">🔘</span><span><strong>Off by default</strong> — enable only when you want it, no surprises</span></li>
+      </ul>
     </div>
   </div>
 </section>
@@ -925,8 +1044,8 @@
       <h3>Build your ideal folder hierarchy</h3>
       <p>Drag and reorder segments to create the exact folder structure you want — with a live preview before you commit.</p>
       <ul>
-        <li>Segments: Category, Device, Year, Quarter, Month, Day</li>
-        <li>4 built-in presets (Default, With Day, Date-first, Flat)</li>
+        <li>Segments: Category, Device, Year, Quarter, Month, Day, Country, City</li>
+        <li>5 built-in presets including "By Location"</li>
         <li>Custom formats: <span class="mono">06_June</span>, <span class="mono">YYYY-MM</span> and more</li>
       </ul>
     </div>
@@ -1060,7 +1179,8 @@
 </footer>
 
 <script>
-  const btn = document.getElementById('themeBtn');
+  /* ── Theme toggle ── */
+  const btn  = document.getElementById('themeBtn');
   const html = document.documentElement;
   const icons = { dark: '🌙', light: '☀️' };
 
@@ -1071,12 +1191,53 @@
     localStorage.setItem('mn-theme', next);
   });
 
-  // Restore saved preference
   const saved = localStorage.getItem('mn-theme');
-  if (saved) {
-    html.dataset.theme = saved;
-    btn.textContent = icons[saved];
-  }
+  if (saved) { html.dataset.theme = saved; btn.textContent = icons[saved]; }
+
+  /* ── Dynamic download URL from GitHub latest release ── */
+  (async () => {
+    try {
+      const res  = await fetch('https://api.github.com/repos/ziggaza/memorynest-sync/releases/latest');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Find the .exe asset
+      const asset = data.assets && data.assets.find(a => a.name.endsWith('.exe'));
+      if (!asset) return;
+
+      const url    = asset.browser_download_url;
+      const sizeMB = (asset.size / 1024 / 1024).toFixed(1);
+      const tag    = data.tag_name || '';   // e.g. "v1.7.0"
+
+      // Update every download button href
+      document.querySelectorAll('.download-btn').forEach(el => {
+        el.href = url;
+      });
+
+      // Update displayed file size
+      document.querySelectorAll('.download-size').forEach(el => {
+        el.textContent = sizeMB + ' MB';
+      });
+
+      // Update version badge text
+      if (tag) {
+        document.querySelectorAll('.version-tag').forEach(el => {
+          el.textContent = tag;
+        });
+        // Also update hero badge raw text node safely
+        const heroBadge = document.querySelector('.hero-badge');
+        if (heroBadge) {
+          heroBadge.childNodes.forEach(n => {
+            if (n.nodeType === 3 && n.textContent.includes('v')) {
+              n.textContent = n.textContent.replace(/v[\d.]+/, tag);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      // Silently keep hardcoded fallback values
+    }
+  })();
 </script>
 
 </body>
