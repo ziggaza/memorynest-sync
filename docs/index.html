@@ -7,6 +7,17 @@
   <meta name="description" content="Free Windows app that automatically organizes 20TB+ of photos and videos into clean folders by device, year, and month. No cloud. No subscription." />
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="apple-touch-icon" href="logo.png" />
+  <!-- Open Graph / Social sharing -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://ziggaza.github.io/memorynest-sync/" />
+  <meta property="og:title"       content="MemoryNest Sync — Organize Your Photo &amp; Video Library" />
+  <meta property="og:description" content="Free Windows app that automatically organizes 20TB+ of photos and videos into clean folders by device, year, and month. No cloud. No subscription. Forever free." />
+  <meta property="og:image"       content="https://ziggaza.github.io/memorynest-sync/hero.png" />
+  <!-- Twitter / X card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="MemoryNest Sync — Organize Your Photo &amp; Video Library" />
+  <meta name="twitter:description" content="Free Windows app that automatically organizes 20TB+ of photos and videos. No cloud. No subscription." />
+  <meta name="twitter:image"       content="https://ziggaza.github.io/memorynest-sync/hero.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -262,7 +273,8 @@
       line-height: 2;
       color: var(--code-color);
     }
-    .ba-box code .dim  { color: var(--faint); }
+    .ba-box code .dim  { color: #777777; }
+    [data-theme="light"] .ba-box code .dim { color: #888888; }
     .ba-box code .hi   { color: var(--gold-light); }
     .ba-box code .ok   { color: #55c977; }
     .arrow-mid { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
@@ -308,6 +320,36 @@
     [data-theme="light"] .vtag.gold   { background: #fdf3e0; border-color: #e8c97a; }
     [data-theme="light"] .vtag.orange { background: #fff0e8; border-color: #f0b080; }
     [data-theme="light"] .vtag.blue   { background: #e8f2ff; border-color: #90bce8; color: #2266aa; }
+
+    /* ── USE CASES ── */
+    .usecase-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      max-width: 1020px;
+      margin: 0 auto;
+    }
+    .uc-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 26px;
+      transition: border-color 0.2s;
+    }
+    [data-theme="dark"] .uc-card:hover { border-color: #444; }
+    [data-theme="light"] .uc-card:hover { border-color: #bbb; }
+    .uc-icon { font-size: 2.2rem; margin-bottom: 16px; }
+    .uc-card h3 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+    .uc-card p  { font-size: 0.87rem; color: var(--sub); line-height: 1.7; margin-bottom: 18px; }
+    .uc-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    .uc-list li {
+      font-size: 0.82rem;
+      color: var(--muted);
+      padding-left: 16px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .uc-list li::before { content: "✓"; position: absolute; left: 0; color: #55c977; font-size: 0.75rem; font-weight: 700; }
 
     /* ── MEMORY MAPPER SPOTLIGHT ── */
     .mm-section {
@@ -677,7 +719,7 @@
 
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
-      .features-grid, .custom-grid { grid-template-columns: 1fr 1fr; }
+      .features-grid, .custom-grid, .usecase-grid { grid-template-columns: 1fr 1fr; }
       .mm-inner, .nm-inner { grid-template-columns: 1fr; gap: 40px; }
     }
     @media (max-width: 768px) {
@@ -688,7 +730,7 @@
       .hero-actions { align-items: center; }
       .hero-visual { order: -1; }
       .before-after { grid-template-columns: 1fr; text-align: center; }
-      .features-grid, .custom-grid, .steps, .safe-grid { grid-template-columns: 1fr; }
+      .features-grid, .custom-grid, .steps, .safe-grid, .usecase-grid { grid-template-columns: 1fr; }
       .section { padding: 56px 24px; }
       .trust-strip { padding: 40px 24px; gap: 28px; }
       footer { flex-direction: column; align-items: center; text-align: center; padding: 32px 24px; }
@@ -813,8 +855,52 @@
   </div>
 </section>
 
+<!-- USE CASES -->
+<section class="section" id="usecases">
+  <div class="section-header">
+    <h2>Who is it for?</h2>
+    <p>Whether you shoot RAW, take family snapshots, or just hate folder chaos — MemoryNest Sync was built for you.</p>
+  </div>
+  <div class="usecase-grid">
+
+    <div class="uc-card">
+      <div class="uc-icon">📷</div>
+      <h3>Photographers</h3>
+      <p>You shoot thousands of RAW+JPEG files across multiple cameras and cards. MemoryNest Sync separates each camera body into its own folder, auto-names files with EXIF tokens like <span class="mono">{date}_{model}_{seq}</span>, and handles duplicate RAW+JPEG pairs without breaking a sweat.</p>
+      <ul class="uc-list">
+        <li>Handles 20TB+ libraries without slowdown</li>
+        <li>Name Mapper turns DSC_4821 into meaningful filenames</li>
+        <li>Per-device folders keep Canon, Sony, and DJI separate</li>
+      </ul>
+    </div>
+
+    <div class="uc-card">
+      <div class="uc-icon">👨‍👩‍👧‍👦</div>
+      <h3>Families</h3>
+      <p>Photos from four different phones, a GoPro, and a holiday camera — all jumbled together. MemoryNest Sync reunites them into one clean library sorted by device and date, and Memory Mapper puts trip photos exactly where they belong: in a folder called "Thailand 2024", not "06_June".</p>
+      <ul class="uc-list">
+        <li>Merge photos from iPhones, Androids, and cameras</li>
+        <li>Event folders: "Summer Camp", "Christmas 2024"</li>
+        <li>Never accidentally delete a single photo</li>
+      </ul>
+    </div>
+
+    <div class="uc-card">
+      <div class="uc-icon">🗂️</div>
+      <h3>Data Organizers</h3>
+      <p>You care about every file being accounted for. Dry Run mode shows you the full picture before anything moves. Duplicate detection is hash-based — byte-perfect, not just filename guessing. Export a complete CSV audit log of every action taken.</p>
+      <ul class="uc-list">
+        <li>xxHash duplicate detection — byte-level accuracy</li>
+        <li>Full activity log exportable as .txt or .csv</li>
+        <li>Skip List filters out noise before scanning</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
 <!-- FEATURES -->
-<section class="section" id="features">
+<section class="section section-alt" id="features">
   <div class="section-header">
     <h2>Built for real photo libraries</h2>
     <p>Not just a renaming tool — a complete organizer designed for collections that span years, devices, and terabytes.</p>
@@ -993,7 +1079,7 @@
       <h2>Meet <em class="orange">Name Mapper</em></h2>
       <p class="mm-tagline orange">Give every file a name that actually means something.</p>
       <p class="mm-desc">
-        Raw camera filenames like <code style="color:var(--faint);font-family:monospace">DSC_4821.jpg</code> tell you nothing. Name Mapper uses EXIF tokens to rename files into clean, meaningful names — automatically, on every run. Pick a preset or build your own pattern from 14 tokens.
+        Raw camera filenames like <code style="color:var(--muted);font-family:monospace;background:var(--bg2);padding:1px 6px;border-radius:4px;border:1px solid var(--border)">DSC_4821.jpg</code> tell you nothing. Name Mapper uses EXIF tokens to rename files into clean, meaningful names — automatically, on every run. Pick a preset or build your own pattern from 14 tokens.
       </p>
       <div class="nm-tokens">
         <span class="nm-token">{date}</span>
