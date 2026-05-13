@@ -458,6 +458,26 @@
     [data-theme="light"] .mm-priority-badge { background: #fdf3e0; border-color: #e8c97a; }
     .mm-rule-default .mm-rule-name { color: var(--muted); font-weight: 400; font-style: italic; }
 
+    .mm-card-footer {
+      display: flex;
+      gap: 8px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+    }
+    .mm-footer-btn {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: default;
+    }
+    .mm-footer-btn.import { background: #0d2010; color: #55c977; border: 1px solid #1a4020; }
+    .mm-footer-btn.export { background: #0d2010; color: #55c977; border: 1px solid #1a4020; }
+    .mm-footer-btn.tpl    { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); }
+    [data-theme="light"] .mm-footer-btn.import,
+    [data-theme="light"] .mm-footer-btn.export { background: #e8f8ee; color: #1a7a3a; border-color: #90d8a8; }
+
     /* ── NAME MAPPER SPOTLIGHT ── */
     .nm-section {
       background: var(--bg2);
@@ -760,7 +780,7 @@
       <a href="#donate">Support</a>
       <a href="https://github.com/ziggaza/memorynest-sync/releases" target="_blank">Releases</a>
       <a class="nav-cta download-btn"
-         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.7.0/MemoryNestSync_Setup_v1.7.0.exe">
+         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.9.0/MemoryNestSync_Setup_v1.9.0.exe">
         Download Free
       </a>
     </div>
@@ -776,7 +796,7 @@
     <p>Whether you have a few gigabytes of family memories or a massive 20TB+ archive — MemoryNest Sync automatically organizes your photos and videos into clean, dated folders, sorted by device, year, and month. Fully customizable. No cloud. No subscription. Forever free.</p>
     <div class="hero-actions">
       <a class="btn-primary download-btn"
-         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.7.0/MemoryNestSync_Setup_v1.7.0.exe">
+         href="https://github.com/ziggaza/memorynest-sync/releases/download/v1.9.0/MemoryNestSync_Setup_v1.9.0.exe">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
           <polyline points="7 10 12 15 17 10"/>
@@ -801,16 +821,15 @@
 <!-- WHAT'S NEW IN v1.7.0 -->
 <div class="whats-new">
   <div class="whats-new-inner">
-    <div class="wn-label">New in v1.7.0</div>
+    <div class="wn-label">New in v1.9.0</div>
     <div class="wn-divider"></div>
     <div class="wn-chips">
+      <span class="wn-chip gold">📥 Import / Export Rules</span>
+      <span class="wn-chip">🔃 Sortable Device columns</span>
+      <span class="wn-chip">📅 First &amp; Last Seen</span>
       <span class="wn-chip orange">✏️ Name Mapper</span>
       <span class="wn-chip gold">✨ Memory Mapper</span>
-      <span class="wn-chip">📋 Skip List</span>
-      <span class="wn-chip">🌐 Live Language Switch</span>
-      <span class="wn-chip">📅 Run History</span>
       <span class="wn-chip">🗑️ Duplicate Review</span>
-      <span class="wn-chip">🌍 Location-Based Sorting</span>
     </div>
   </div>
 </div>
@@ -986,6 +1005,8 @@
         <li><span class="bul-icon">📱</span><span><strong>Device filter</strong> — target a specific camera or apply to all devices</span></li>
         <li><span class="bul-icon">🏆</span><span><strong>Priority matching</strong> — rules are checked in order; first match wins</span></li>
         <li><span class="bul-icon">✏️</span><span><strong>Inline editing</strong> — rename or adjust any rule without leaving the screen</span></li>
+        <li><span class="bul-icon">📥</span><span><strong>Import rules</strong> — load from CSV, TSV, or XLSX with a full preview before applying</span></li>
+        <li><span class="bul-icon">📤</span><span><strong>Export rules</strong> — save to CSV, TSV, or styled XLSX; download a blank template to get started</span></li>
         <li><span class="bul-icon">📁</span><span><strong>Everything else</strong> falls back to your standard device / date structure</span></li>
       </ul>
     </div>
@@ -1026,6 +1047,11 @@
             <span class="mm-rule-range">Standard device / year / month folders</span>
           </div>
           <span class="mm-rule-dest muted-dest">→ Device / YYYY / MM/</span>
+        </div>
+        <div class="mm-card-footer">
+          <span class="mm-footer-btn import">📥 Import</span>
+          <span class="mm-footer-btn export">📤 Export</span>
+          <span class="mm-footer-btn tpl">📋 Template</span>
         </div>
       </div>
     </div>
@@ -1124,7 +1150,8 @@
       <ul>
         <li>Map <span class="mono">Apple|iPhone 15 Pro</span> → <span class="mono">My iPhone 15 Pro</span></li>
         <li>Auto-badge shows unrecognized devices</li>
-        <li>Works with any camera make &amp; model</li>
+        <li>Sortable columns — EXIF Key, Folder Name, Date Added, First Seen, Last Seen</li>
+        <li>First &amp; Last Seen dates show earliest and most recent file per device</li>
       </ul>
     </div>
     <div class="custom-card">
